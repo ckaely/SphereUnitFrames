@@ -295,9 +295,9 @@ function SUF:ResolveFillColor(cfg, ratio)
     local mode = cfg.fill_color_mode or "class"
 
     if mode == "class" then
-        local ok, class = pcall(UnitClass, "player")
-        if ok and class then
-            local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[class]
+        local ok, _, englishClass = pcall(UnitClass, "player")
+        if ok and englishClass then
+            local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[englishClass]
             if cc then return cc.r, cc.g, cc.b end
         end
         return 1.0, 1.0, 1.0

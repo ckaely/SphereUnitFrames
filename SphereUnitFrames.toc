@@ -1,4 +1,4 @@
-## Interface: 110002
+## Interface: 120005
 ## Title: SphereUnitFrames
 ## Notes: Orb-style player unit frame — HP, cast, auras, minimap, action wings
 ## Author: ckaely

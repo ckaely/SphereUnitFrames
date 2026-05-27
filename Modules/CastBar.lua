@@ -99,6 +99,8 @@ function CastBar:Init(data)
     cd:SetHideCountdownNumbers(true)
     cd:SetReverse(true)
     pcall(function() cd:SetSwipeTexture("Interface\\Cooldown\\ping4") end)
+    pcall(function() cd:SetUseCircularEdge(true) end)
+    pcall(function() cd:SetDrawBling(false) end)
     cd:SetSwipeColor(CLR_CAST.r, CLR_CAST.g, CLR_CAST.b, 0.85)
 
     -- Anneau glow ADD
