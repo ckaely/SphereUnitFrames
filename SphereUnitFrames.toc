@@ -1,0 +1,27 @@
+## Interface: 110002
+## Title: SphereUnitFrames
+## Notes: Orb-style player unit frame — HP, cast, auras, minimap, action wings
+## Author: ckaely
+## Version: 0.1.0
+## SavedVariables: SUFDB
+
+Libs/LibStub/LibStub.lua
+Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
+Libs/AceDB-3.0/AceDB-3.0.lua
+Libs/AceGUI-3.0/AceGUI-3.0.lua
+Libs/AceConfig-3.0/AceConfig-3.0.lua
+Libs/AceDBOptions-3.0/AceDBOptions-3.0.lua
+Libs/LibSharedMedia-3.0/LibSharedMedia-3.0.lua
+
+Config.lua
+Orb.lua
+Modules/Logs.lua
+Modules/Profiler.lua
+Modules/Auras.lua
+Modules/CastBar.lua
+Modules/Power.lua
+Modules/MinimapIntegration.lua
+Modules/ActionBars.lua
+Modules/Interaction.lua
+Core.lua
+Modules/PSUI.lua

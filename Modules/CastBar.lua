@@ -1,0 +1,416 @@
+-------------------------------------------------------------------------------
+--  SphereUnitFrames · CastBar.lua
+--  Cast bar circulaire pour l'unité "player" uniquement.
+--  Un seul watcher (RegisterUnitEvent), pas de pool de frames.
+--  Modes : "circular" (CooldownFrame arc) | "classic" (pill bar)
+-------------------------------------------------------------------------------
+
+local ADDON = "SphereUnitFrames"
+local SUF   = _G[ADDON]
+if not SUF then return end
+
+SUF.CastBar = SUF.CastBar or {}
+local CastBar = SUF.CastBar
+
+-- ─── Palette ─────────────────────────────────────────────────────────────────
+local CLR_CAST    = {r=1.0,  g=0.65, b=0.00}
+local CLR_CHANNEL = {r=0.30, g=0.70, b=1.00}
+local CLR_NONINT  = {r=0.62, g=0.18, b=1.00}
+local CLR_FINISH  = {r=0.30, g=1.00, b=0.30}
+local CLR_BROKEN  = {r=0.95, g=0.20, b=0.20}
+
+local CAST_EVENTS = {
+    "UNIT_SPELLCAST_START",
+    "UNIT_SPELLCAST_DELAYED",
+    "UNIT_SPELLCAST_STOP",
+    "UNIT_SPELLCAST_INTERRUPTED",
+    "UNIT_SPELLCAST_FAILED",
+    "UNIT_SPELLCAST_CHANNEL_START",
+    "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_SPELLCAST_CHANNEL_UPDATE",
+    "UNIT_SPELLCAST_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_SUCCEEDED",
+}
+
+local _watcher = nil
+
+-- ─── Helpers ─────────────────────────────────────────────────────────────────
+local function _safeNum(v)
+    if v == nil then return nil end
+    local n = SUF:UntaintNum(v)
+    if n then return n end
+    local ok, r = pcall(tonumber, v)
+    return ok and r or nil
+end
+
+local function _normMS(v)
+    local n = _safeNum(v)
+    if not n or n <= 0 then return nil end
+    return n > 1000 and (n / 1000) or n
+end
+
+local function _spellIcon(spellId)
+    if not spellId then return nil end
+    if C_Spell and C_Spell.GetSpellTexture then
+        local ok, t = pcall(C_Spell.GetSpellTexture, spellId)
+        if ok and t ~= nil then return t end
+    end
+    if GetSpellTexture then
+        local ok, t = pcall(GetSpellTexture, spellId)
+        if ok and t ~= nil then return t end
+    end
+    return nil
+end
+
+local function _spellName(spellId)
+    if not spellId then return nil end
+    if C_Spell and C_Spell.GetSpellInfo then
+        local ok, info = pcall(C_Spell.GetSpellInfo, spellId)
+        if ok and type(info) == "table" and info.name ~= nil then
+            -- SetText accepte les secret strings
+            return info.name
+        end
+    end
+    return nil
+end
+
+-- ─── Init (après Orb:CreatePlayer) ───────────────────────────────────────────
+function CastBar:Init(data)
+    if not data or not data.root then return end
+    if data.castbar then return end
+
+    local root   = data.root
+    local rootFL = root:GetFrameLevel() or 100
+    local cfg    = SUF.db
+    local size   = (cfg and cfg.orbSize) or 160
+    local arcSize = size + 28
+
+    -- ── Circular arc ─────────────────────────────────────────────────────────
+    local arcFrame = CreateFrame("Frame", "SUFCastArcFrame", root)
+    arcFrame:SetSize(arcSize, arcSize)
+    arcFrame:SetPoint("CENTER", root, "CENTER", 0, math.floor(size * 0.05))
+    arcFrame:SetFrameLevel(rootFL + 5)
+
+    local cd = CreateFrame("Cooldown", nil, arcFrame)
+    cd:SetAllPoints(arcFrame)
+    cd:SetDrawSwipe(true)
+    cd:SetDrawEdge(true)
+    cd:SetHideCountdownNumbers(true)
+    cd:SetReverse(true)
+    pcall(function() cd:SetSwipeTexture("Interface\\Cooldown\\ping4") end)
+    cd:SetSwipeColor(CLR_CAST.r, CLR_CAST.g, CLR_CAST.b, 0.85)
+
+    -- Anneau glow ADD
+    local glowRing = arcFrame:CreateTexture(nil, "OVERLAY")
+    glowRing:SetTexture(SUF.NATIVE_RING or "Interface\\Buttons\\UI-AutoCastableOverlay")
+    glowRing:SetSize(arcSize + 16, arcSize + 16)
+    glowRing:SetPoint("CENTER", arcFrame, "CENTER")
+    glowRing:SetBlendMode("ADD")
+    glowRing:SetVertexColor(CLR_CAST.r, CLR_CAST.g, CLR_CAST.b)
+    glowRing:SetAlpha(0)
+
+    -- ── Classic pill bar ──────────────────────────────────────────────────────
+    local pill = CreateFrame("StatusBar", nil, root)
+    pill:SetSize(size, 12)
+    pill:SetPoint("TOP", root, "BOTTOM", 0, -2)
+    pill:SetFrameLevel(rootFL + 5)
+    pill:SetStatusBarTexture(SUF.WHITE8x8 or "Interface\\Buttons\\WHITE8X8")
+    pill:SetMinMaxValues(0, 1)
+    pill:SetValue(0)
+    local pillBg = pill:CreateTexture(nil, "BACKGROUND")
+    pillBg:SetAllPoints(pill)
+    pillBg:SetTexture(SUF.WHITE8x8 or "Interface\\Buttons\\WHITE8X8")
+    pillBg:SetVertexColor(0.03, 0.03, 0.05, 0.85)
+    local pillTex = pill:GetStatusBarTexture()
+    if pillTex then pillTex:SetVertexColor(CLR_CAST.r, CLR_CAST.g, CLR_CAST.b, 1) end
+
+    -- ── Icon ─────────────────────────────────────────────────────────────────
+    local iconSz  = 28
+    local iconFrm = CreateFrame("Frame", nil, root)
+    iconFrm:SetSize(iconSz, iconSz)
+    iconFrm:SetPoint("BOTTOMLEFT", root, "TOPRIGHT", -math.floor(size * 0.1), 4)
+    iconFrm:SetFrameLevel(rootFL + 6)
+
+    local iconMask = iconFrm:CreateMaskTexture()
+    pcall(function()
+        iconMask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask",
+            "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        iconMask:SetAllPoints(iconFrm)
+    end)
+    local iconTex = iconFrm:CreateTexture(nil, "ARTWORK")
+    iconTex:SetAllPoints(iconFrm)
+    iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    if iconMask then pcall(iconTex.AddMaskTexture, iconTex, iconMask) end
+
+    local iconBorder = iconFrm:CreateTexture(nil, "OVERLAY")
+    iconBorder:SetPoint("CENTER", iconFrm, "CENTER")
+    iconBorder:SetSize(iconSz + 8, iconSz + 8)
+    iconBorder:SetTexture(SUF.NATIVE_RING or "Interface\\Buttons\\UI-AutoCastableOverlay")
+    iconBorder:SetBlendMode("ADD")
+    iconBorder:SetVertexColor(CLR_CAST.r, CLR_CAST.g, CLR_CAST.b)
+
+    -- ── Textes ───────────────────────────────────────────────────────────────
+    local fontSize = (cfg and cfg.castbar_time_font_size) or 12
+    local font     = (cfg and cfg.hp_font) or "Fonts\\FRIZQT__.TTF"
+
+    local castName = root:CreateFontString(nil, "OVERLAY")
+    castName:SetFont(font, fontSize, "OUTLINE")
+    castName:SetPoint("TOP", root, "BOTTOM", 0, -16)
+    castName:SetWidth(size * 1.8)
+    castName:SetJustifyH("CENTER")
+    castName:SetTextColor(1, 0.88, 0.45, 1)
+
+    local castTime = root:CreateFontString(nil, "OVERLAY")
+    castTime:SetFont(font, fontSize - 2, "OUTLINE")
+    castTime:SetPoint("TOP", castName, "BOTTOM", 0, -1)
+    castTime:SetJustifyH("CENTER")
+    castTime:SetTextColor(1, 1, 1, 1)
+
+    -- Lock icon
+    local lockTex = root:CreateTexture(nil, "OVERLAY")
+    lockTex:SetSize(10, 12)
+    lockTex:SetPoint("RIGHT", castName, "LEFT", -3, 0)
+    lockTex:SetTexture("Interface\\PetBattles\\PetBattle-LockIcon")
+    lockTex:SetAlpha(0)
+
+    -- ── Assemble ─────────────────────────────────────────────────────────────
+    data.castbar = {
+        arcFrame    = arcFrame,
+        cd          = cd,
+        glowRing    = glowRing,
+        pill        = pill,
+        iconFrm     = iconFrm,
+        iconTex     = iconTex,
+        iconBorder  = iconBorder,
+        castName    = castName,
+        castTime    = castTime,
+        lockTex     = lockTex,
+        active      = false,
+        channeling  = false,
+        interruptible = true,
+        startTime   = 0,
+        endTime     = 0,
+        duration    = 0,
+        spellId     = nil,
+        color       = CLR_CAST,
+    }
+
+    arcFrame:Hide()
+    pill:Hide()
+    iconFrm:Hide()
+    castName:Hide()
+    castTime:Hide()
+
+    self:_InitWatcher()
+end
+
+function CastBar:_InitWatcher()
+    if _watcher then return end
+    _watcher = CreateFrame("Frame", "SUFCastWatcher")
+    for _, ev in ipairs(CAST_EVENTS) do
+        pcall(_watcher.RegisterUnitEvent, _watcher, ev, "player")
+    end
+    _watcher:SetScript("OnEvent", function(_, event, unit, ...)
+        CastBar:_OnEvent(event, unit, ...)
+    end)
+end
+
+-- ─── Event handler ───────────────────────────────────────────────────────────
+function CastBar:_OnEvent(event, unit, ...)
+    local data = SUF.player
+    if not (data and data.castbar) then return end
+    local cb = data.castbar
+
+    if event == "UNIT_SPELLCAST_START" then
+        local name, sMS, eMS, notInt, spellId
+        pcall(function()
+            name, _, _, sMS, eMS, _, _, notInt, spellId = UnitCastingInfo("player")
+        end)
+        local s = _normMS(sMS) or GetTime()
+        local e = _normMS(eMS) or (GetTime() + 1.5)
+        self:_StartCast(data, false, spellId, s, e, not notInt)
+
+    elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
+        local name, sMS, eMS, notInt, spellId
+        pcall(function()
+            name, _, _, sMS, eMS, _, notInt, spellId = UnitChannelInfo("player")
+        end)
+        local s = _normMS(sMS) or GetTime()
+        local e = _normMS(eMS) or (GetTime() + 2.0)
+        self:_StartCast(data, true, spellId, s, e, not notInt)
+
+    elseif event == "UNIT_SPELLCAST_DELAYED" then
+        pcall(function()
+            local _, _, _, sMS, eMS = UnitCastingInfo("player")
+            local s = _normMS(sMS); local e = _normMS(eMS)
+            if s and e then cb.startTime = s; cb.endTime = e; cb.duration = math.max(0.1, e - s) end
+            if cb.cd and cb.active then cb.cd:SetCooldown(s or cb.startTime, cb.duration) end
+        end)
+
+    elseif event == "UNIT_SPELLCAST_CHANNEL_UPDATE" then
+        pcall(function()
+            local _, _, _, sMS, eMS = UnitChannelInfo("player")
+            local s = _normMS(sMS); local e = _normMS(eMS)
+            if s and e then cb.startTime = s; cb.endTime = e; cb.duration = math.max(0.1, e - s) end
+        end)
+
+    elseif event == "UNIT_SPELLCAST_STOP"
+        or event == "UNIT_SPELLCAST_FAILED"
+        or event == "UNIT_SPELLCAST_CHANNEL_STOP" then
+        self:Reset(data)
+
+    elseif event == "UNIT_SPELLCAST_INTERRUPTED" then
+        if cb.castName then cb.castName:SetTextColor(CLR_BROKEN.r, CLR_BROKEN.g, CLR_BROKEN.b) end
+        if cb.iconBorder then cb.iconBorder:SetVertexColor(CLR_BROKEN.r, CLR_BROKEN.g, CLR_BROKEN.b) end
+        local pillTex = cb.pill and cb.pill:GetStatusBarTexture()
+        if pillTex then pillTex:SetVertexColor(CLR_BROKEN.r, CLR_BROKEN.g, CLR_BROKEN.b, 1) end
+        C_Timer.After(0.4, function()
+            if data.castbar and not data.castbar.active then return end
+            CastBar:Reset(data)
+        end)
+
+    elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if cb.castName then cb.castName:SetTextColor(CLR_FINISH.r, CLR_FINISH.g, CLR_FINISH.b) end
+        C_Timer.After(0.22, function() CastBar:Reset(data) end)
+
+    elseif event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
+        cb.interruptible = true
+        self:_ApplyColor(data)
+
+    elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
+        cb.interruptible = false
+        self:_ApplyColor(data)
+    end
+end
+
+function CastBar:_StartCast(data, isChannel, spellId, startSec, endSec, interruptible)
+    local cb = data.castbar
+    cb.active         = true
+    cb.channeling     = isChannel
+    cb.interruptible  = interruptible
+    cb.startTime      = startSec
+    cb.endTime        = endSec
+    cb.duration       = math.max(0.1, endSec - startSec)
+    cb.spellId        = spellId
+    cb.color          = isChannel and CLR_CHANNEL or CLR_CAST
+
+    -- Icon
+    local iconPath = _spellIcon(spellId)
+    if iconPath and cb.iconTex then pcall(cb.iconTex.SetTexture, cb.iconTex, iconPath) end
+
+    -- Name
+    if cb.castName then
+        local n = _spellName(spellId)
+        if n ~= nil then
+            pcall(cb.castName.SetText, cb.castName, n)
+        else
+            cb.castName:SetText(isChannel and "Canalisation" or "Incantation")
+        end
+        cb.castName:Show()
+    end
+
+    -- Visual mode
+    local cfg  = SUF.db
+    local mode = (cfg and cfg.castbar_style) or "circular"
+    local showCirc  = (mode == "circular" or mode == "segments")
+    local showPill  = (mode == "classic")
+
+    if cb.arcFrame then
+        if showCirc then cb.arcFrame:Show() else cb.arcFrame:Hide() end
+    end
+    if cb.pill then
+        if showPill then cb.pill:Show() else cb.pill:Hide() end
+    end
+    if cb.iconFrm then
+        cb.iconFrm:Show()
+    end
+    if cb.castTime and cfg and cfg.castbar_show_time ~= false then
+        cb.castTime:Show()
+    end
+    if cb.lockTex then cb.lockTex:SetAlpha(interruptible and 0 or 0.8) end
+
+    -- Cooldown arc
+    if cb.cd then
+        cb.cd:SetReverse(not isChannel)
+        cb.cd:SetCooldown(startSec, cb.duration)
+    end
+
+    self:_ApplyColor(data)
+end
+
+function CastBar:_ApplyColor(data)
+    local cb = data.castbar
+    if not cb then return end
+    local c = (not cb.interruptible) and CLR_NONINT
+           or cb.channeling and CLR_CHANNEL
+           or CLR_CAST
+    cb.color = c
+    if cb.cd       then cb.cd:SetSwipeColor(c.r, c.g, c.b, 0.85) end
+    if cb.glowRing then cb.glowRing:SetVertexColor(c.r, c.g, c.b) end
+    if cb.iconBorder then cb.iconBorder:SetVertexColor(c.r, c.g, c.b) end
+    local pillTex = cb.pill and cb.pill:GetStatusBarTexture()
+    if pillTex then pillTex:SetVertexColor(c.r, c.g, c.b, 1) end
+    local tr = cb.interruptible and 1.0 or 0.88
+    local tg = cb.channeling and 0.75 or (cb.interruptible and 0.88 or 0.62)
+    local tb = cb.channeling and 0.45 or (cb.interruptible and 0.45 or 1.0)
+    if cb.castName then cb.castName:SetTextColor(tr, tg, tb, 1) end
+end
+
+-- ─── Tick (60 FPS depuis Core_OnUpdate) ──────────────────────────────────────
+function CastBar:Tick(data, now)
+    local cb = data and data.castbar
+    if not cb or not cb.active then return end
+    local cfg = SUF.db
+    if cfg and cfg.castbar_enabled == false then self:Reset(data); return end
+
+    local dur = cb.duration
+    if dur <= 0 then return end
+
+    -- Pill progress (arc est géré par le CooldownFrame natif)
+    if cb.pill and cb.pill:IsShown() then
+        local p = math.max(0, math.min(1, (now - cb.startTime) / dur))
+        if cb.channeling then p = 1 - p end
+        cb.pill:SetValue(p)
+    end
+
+    -- Texte temps restant
+    if cb.castTime and cb.castTime:IsShown() then
+        local remaining = math.max(0, cb.endTime - now)
+        cb.castTime:SetText(string.format("%.1fs", remaining))
+    end
+
+    -- Glow pulse proche de la fin
+    if cb.glowRing then
+        local p = math.max(0, math.min(1, (now - cb.startTime) / dur))
+        if not cb.channeling and p > 0.80 then
+            local frac = (p - 0.80) / 0.20
+            cb.glowRing:SetAlpha(0.15 + 0.45 * frac)
+        else
+            cb.glowRing:SetAlpha(0)
+        end
+    end
+
+    -- Expiration
+    if now >= cb.endTime + 0.30 then
+        self:Reset(data)
+    end
+end
+
+-- ─── Reset ────────────────────────────────────────────────────────────────────
+function CastBar:Reset(data)
+    local cb = data and data.castbar
+    if not cb then return end
+    cb.active    = false
+    cb.channeling = false
+    cb.spellId   = nil
+    if cb.arcFrame  then cb.arcFrame:Hide() end
+    if cb.pill      then cb.pill:Hide() end
+    if cb.iconFrm   then cb.iconFrm:Hide() end
+    if cb.castName  then cb.castName:Hide(); cb.castName:SetText("") end
+    if cb.castTime  then cb.castTime:Hide(); cb.castTime:SetText("") end
+    if cb.lockTex   then cb.lockTex:SetAlpha(0) end
+    if cb.glowRing  then cb.glowRing:SetAlpha(0) end
+    if cb.cd        then pcall(cb.cd.Clear, cb.cd) end
+    if cb.pill      then cb.pill:SetValue(0) end
+end

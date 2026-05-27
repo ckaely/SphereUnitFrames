@@ -1,0 +1,34 @@
+# ============================================================
+# SphereUnitFrames — .gitignore
+# Repo public : code addon uniquement.
+# Docs AI et backups → repo privé addon-workspace via sync-docs.ps1
+# ============================================================
+
+# --- Documentation AI (stockée dans addon-workspace/SphereUnitFrames/) ---
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+PROJECT_CONTEXT.md
+WIKI.md
+BROKER.md
+Ingenieur_addons.md
+MEMORY.md
+*.local.md
+
+# --- Backups et dev scratch ---
+CCB/
+backups/
+*.bak
+
+# --- Système ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.log
+
+# --- Éditeurs ---
+.vscode/
+.idea/
+*.swp
+*~
