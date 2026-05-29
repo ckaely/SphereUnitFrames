@@ -167,16 +167,28 @@ SUF.defaults = {
         minimap_hp_threshold     = 0,           -- 0 = toujours visible hors combat
         minimap_transition_speed = 0.3,
         minimap_hide_buttons     = true,
+        minimap_blip_only        = true,         -- ne garder que le blip circulaire (pas le cadre/textes)
+        minimap_click_toggle     = true,         -- clic gauche sur l'orbe : bascule sphère ↔ carte
+        minimap_shown            = false,        -- état runtime : carte affichée dans l'orbe ?
+        minimap_zoom             = 1.0,          -- échelle visuelle du blip dans l'orbe
 
         -- Barres d'action (ailes triangulaires)
+        -- Chaque triangle = 1 bouton. Le layout est défini par le nombre de
+        -- boutons PAR COLONNE (liste décroissante = triangle pointant vers
+        -- l'extérieur). Les colonnes sont remplies séquentiellement à partir
+        -- de la barre WoW choisie (déborde sur la barre suivante si > 12).
         actionbars_enabled       = true,
-        actionbar_left_bar       = 2,
+        actionbar_left_bar       = 1,
         actionbar_left_start     = 1,
-        actionbar_left_count     = 12,
+        actionbar_left_columns   = "7,5,3,1",   -- aile gauche : colonnes (boutons)
         actionbar_right_bar      = 3,
         actionbar_right_start    = 1,
-        actionbar_right_count    = 12,
-        actionbar_tri_size       = 44,
+        actionbar_right_columns  = "7,5,3,1",   -- aile droite : colonnes (boutons)
+        actionbar_tri_size       = 40,          -- taille d'un triangle (px)
+        actionbar_tri_spacing    = 0.96,        -- facteur d'espacement (overlap)
+        actionbar_gap            = 6,           -- marge entre orbe et 1re colonne
+        actionbar_show_frames    = true,        -- dessiner les cadres (bordures)
+        actionbar_frame_alpha    = 0.95,
         actionbar_glow_procs     = true,
         actionbar_range_check    = true,
 

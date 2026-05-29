@@ -2,10 +2,17 @@
 --  SphereUnitFrames · ActionBars.lua
 --  Barres d'action triangulaires autour de la sphère joueur.
 --
---  Aile droite : bar cfg.actionbar_right_bar  (12 boutons)
---  Aile gauche : bar cfg.actionbar_left_bar   (12 boutons)
---  Layout      : 3 rangées (5-4-3) → triangle pointant vers l'extérieur
---  Masques     : SUF.MEDIA/tri_right.png + tri_left.png (CLAMPTOBLACKADDITIVE)
+--  Modèle (voir schéma utilisateur) :
+--    • Chaque TRIANGLE = 1 bouton d'action.
+--    • Le layout est défini par le nombre de boutons PAR COLONNE.
+--      ex: "7,5,3,1" → 4 colonnes décroissantes = triangle pointant vers
+--      l'extérieur (16 boutons). Colonne 1 = la plus proche de l'orbe.
+--    • Triangles △/▽ alternés (damier) pour tesseller proprement.
+--    • Masques : SUF.MEDIA/tri_up.png + tri_down.png.
+--    • Cadre : triangle plein teinté or derrière l'icône (bordure).
+--
+--  Slots WoW : remplis séquentiellement à partir de la barre choisie
+--    (déborde sur la barre suivante si total > 12 — slots absolus contigus).
 --
 --  Combat safety :
 --    • SecureActionButtonTemplate → cliquable en combat
@@ -25,192 +32,292 @@ ActionBars._rightButtons = nil
 ActionBars._leftWing     = nil
 ActionBars._rightWing    = nil
 
--- ─── Constantes de layout ─────────────────────────────────────────────────────
--- Triangle 5-4-3 (outer → inner, left to right for right wing)
--- Chaque rangée est centrée verticalement sur l'orbe.
--- xFactor = décalage X par rangée (exprimé en unités de taille bouton)
--- yOffset = décalages Y relatifs au centre pour les boutons de la rangée
+local function SNPM(n)
+    return (SUF.MEDIA or "Interface\\AddOns\\SphereUnitFrames\\media\\") .. n
+end
+local TRI_UP   = SNPM("tri_up.png")
+local TRI_DOWN = SNPM("tri_down.png")
 
-local TRIANGLE_ROWS_RIGHT = {
-    { count=5, xFactor=1.6 },  -- rangée extérieure
-    { count=4, xFactor=1.0 },  -- rangée médiane
-    { count=3, xFactor=0.4 },  -- rangée intérieure
-}
-
--- Les slots d'action bar WoW : bar N slot S → slot absolu (N-1)*12 + S
-local function _actionSlot(bar, startSlot, buttonIndex)
-    local baseSlot = (bar - 1) * 12 + (startSlot - 1)
-    return baseSlot + buttonIndex
+-- ─── Parsing colonnes ─────────────────────────────────────────────────────────
+-- "7,5,3,1" → { 7, 5, 3, 1 }
+local function _parseColumns(str)
+    local cols = {}
+    if type(str) ~= "string" then str = "7,5,3,1" end
+    for n in str:gmatch("%d+") do
+        local v = tonumber(n)
+        if v and v > 0 then cols[#cols+1] = math.min(v, 12) end
+    end
+    if #cols == 0 then cols = {7, 5, 3, 1} end
+    return cols
 end
 
--- ─── Création d'un bouton d'action ────────────────────────────────────────────
+-- Slot d'action absolu WoW (1..120) — contigu à travers les barres.
+local function _absSlot(baseBar, startSlot, seqIndex)
+    return (baseBar - 1) * 12 + (startSlot - 1) + seqIndex  -- seqIndex 1-based
+end
+
+-- ─── Création d'un bouton triangulaire ────────────────────────────────────────
 local _btnCount = 0
-local function _createButton(parent, actionSlot, name)
+local function _createButton(parent, actionSlot, up, btnSize, name)
     if InCombatLockdown() then return nil end
     _btnCount = _btnCount + 1
     local btnName = name or ("SUFActionBtn" .. _btnCount)
+    local cfg = SUF.db
 
-    -- SecureActionButtonTemplate : cliquable en combat
     local btn = CreateFrame("CheckButton", btnName, parent,
         "SecureActionButtonTemplate, ActionButtonTemplate")
-    btn:SetSize(36, 36)
+    btn:SetSize(btnSize, btnSize)
     btn:SetAttribute("type",   "action")
     btn:SetAttribute("action", actionSlot)
-    btn:SetAttribute("checkselfcast",   true)
-    btn:SetAttribute("checkfocuscast",  true)
+    btn:SetAttribute("checkselfcast",  true)
+    btn:SetAttribute("checkfocuscast", true)
+    btn._actionSlot = actionSlot
+    btn._up = up
 
-    -- Masque triangulaire (si la texture existe)
-    local triMaskPath = parent._triMaskPath
-    if triMaskPath then
-        local mask = btn:CreateMaskTexture()
+    local triPath = up and TRI_UP or TRI_DOWN
+
+    -- Masque triangulaire appliqué à l'icône
+    local mask = btn:CreateMaskTexture()
+    pcall(function()
+        mask:SetTexture(triPath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        mask:SetAllPoints(btn)
+    end)
+    btn._triMask = mask
+
+    -- Cadre (bordure) : triangle plein teinté, légèrement plus grand, derrière.
+    if cfg and cfg.actionbar_show_frames ~= false then
+        local frame = btn:CreateTexture(nil, "BACKGROUND")
+        frame:SetTexture(triPath)
+        frame:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        frame:SetSize(btnSize, btnSize)
+        frame:SetVertexColor(0.85, 0.68, 0.20, cfg.actionbar_frame_alpha or 0.95)
+        btn._frameTex = frame
+
+        -- Fond sombre interne (laisse apparaître le cadre or sur les bords)
+        local fill = btn:CreateTexture(nil, "BORDER")
+        fill:SetTexture(triPath)
+        fill:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        fill:SetSize(btnSize * 0.88, btnSize * 0.88)
+        fill:SetVertexColor(0.05, 0.05, 0.07, 0.92)
+        btn._fillTex = fill
+    end
+
+    -- Icône d'action : masquée triangle, insérée à l'intérieur du cadre
+    local iconTex = btn.icon or btn.Icon
+    if iconTex then
+        iconTex:ClearAllPoints()
+        iconTex:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        iconTex:SetSize(btnSize * 0.80, btnSize * 0.80)
+        iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        pcall(iconTex.AddMaskTexture, iconTex, mask)
+    end
+
+    -- Masquer la bordure carrée native de l'ActionButtonTemplate
+    local nrm = btn.GetNormalTexture and btn:GetNormalTexture()
+    if nrm then nrm:SetAlpha(0) end
+    if btn.SetNormalTexture then pcall(btn.SetNormalTexture, btn, "") end
+    -- Highlight / pushed : teinter sans casser la forme
+    if btn.GetHighlightTexture and btn:GetHighlightTexture() then
         pcall(function()
-            mask:SetTexture(triMaskPath, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-            mask:SetAllPoints(btn)
+            local h = btn:GetHighlightTexture()
+            h:SetAllPoints(btn)
+            pcall(h.AddMaskTexture, h, mask)
         end)
-        -- Appliquer le masque sur les textures du bouton
+    end
+    if btn.GetPushedTexture and btn:GetPushedTexture() then
         pcall(function()
-            local iconTex = btn.icon or btn.Icon or btn:GetNormalTexture()
-            if iconTex then iconTex:AddMaskTexture(mask) end
+            local pT = btn:GetPushedTexture()
+            pT:SetAllPoints(btn)
+            pcall(pT.AddMaskTexture, pT, mask)
         end)
     end
 
-    -- Keybind text (KEY_BINDING tag)
+    -- Cooldown : masquer en triangle si possible
+    if btn.cooldown then
+        pcall(function() btn.cooldown:SetAllPoints(btn) end)
+    end
+
+    -- Keybind
     if btn.HotKey then
         btn.HotKey:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
         btn.HotKey:SetTextColor(1, 1, 1, 0.85)
+        btn.HotKey:ClearAllPoints()
+        btn.HotKey:SetPoint("TOP", btn, "TOP", 0, up and -2 or -8)
     end
-
-    -- Proc glow si activé
-    btn._actionSlot = actionSlot
+    if btn.Count then
+        btn.Count:ClearAllPoints()
+        btn.Count:SetPoint("BOTTOM", btn, "BOTTOM", 0, up and 6 or 2)
+    end
 
     return btn
 end
 
--- ─── Layout d'une aile ────────────────────────────────────────────────────────
-local function _layoutWing(wing, buttons, btnSize, isLeft)
+-- ─── Layout d'une aile par colonnes ───────────────────────────────────────────
+-- buttons : table de boutons déjà créés (ordre séquentiel)
+-- columns : { 7, 5, 3, 1 }
+local function _layoutWing(wing, buttons, columns, btnSize, isLeft)
     if not wing then return end
-    local idx = 1
-    local rows = TRIANGLE_ROWS_RIGHT
-    local rootSize = wing._orbSize or 160
-    local xBase = rootSize * 0.5 + btnSize * 0.3  -- bord de l'orbe + marge
+    local cfg     = SUF.db
+    local spacing = cfg.actionbar_tri_spacing or 0.96
+    local gap     = cfg.actionbar_gap or 6
+    local orbR    = (wing._orbSize or 160) * 0.5
 
-    for _, row in ipairs(rows) do
-        local count   = row.count
-        local xOffset = xBase + row.xFactor * btnSize
-        local totalH  = (count - 1) * btnSize
+    local stepX = btnSize * 0.5 * spacing   -- demi-largeur → colonnes interlock
+    local stepY = btnSize * 0.5 * spacing   -- demi-hauteur → triangles interlock
+    local baseX = orbR + gap + btnSize * 0.5
+
+    local idx = 1
+    for c = 1, #columns do
+        local count = columns[c]
+        local colX  = baseX + (c - 1) * stepX
+        if isLeft then colX = -colX end
         for j = 1, count do
             local btn = buttons[idx]
             if btn then
-                local yOffset = totalH * 0.5 - (j - 1) * btnSize
+                local yOff = ((count - 1) * 0.5 - (j - 1)) * stepY
                 btn:ClearAllPoints()
-                if isLeft then
-                    btn:SetPoint("RIGHT", wing, "CENTER", -xOffset, yOffset)
-                else
-                    btn:SetPoint("LEFT",  wing, "CENTER",  xOffset, yOffset)
-                end
+                btn:SetPoint("CENTER", wing, "CENTER", colX, yOff)
             end
             idx = idx + 1
         end
     end
 end
 
--- ─── Init / Prewarm ──────────────────────────────────────────────────────────
+-- ─── Construire une aile complète ─────────────────────────────────────────────
+local function _buildWing(name, root, rootFL, size, baseBar, startSlot, columns, btnSize, isLeft)
+    local wing = CreateFrame("Frame", name, root)
+    wing:SetSize(size, size)
+    wing:SetPoint("CENTER", root, "CENTER", 0, 0)
+    wing:SetFrameLevel(rootFL + 6)
+    wing._orbSize = size
+
+    local buttons = {}
+    -- ordre de remplissage : △/▽ damier basé sur (colonne + rangée)
+    local idx = 1
+    for c = 1, #columns do
+        local count = columns[c]
+        for j = 1, count do
+            local up = ((c + j) % 2 == 0)
+            local slot = _absSlot(baseBar, startSlot, idx)
+            local btn  = _createButton(wing, slot, up, btnSize, name .. "B" .. idx)
+            if btn then buttons[idx] = btn end
+            idx = idx + 1
+        end
+    end
+    _layoutWing(wing, buttons, columns, btnSize, isLeft)
+    return wing, buttons
+end
+
+-- ─── Init ──────────────────────────────────────────────────────────────────────
 function ActionBars:Init()
     local data = SUF.player
     if not data or not data.root then return end
     local cfg = SUF.db
     if not cfg or cfg.actionbars_enabled == false then return end
     if InCombatLockdown() then return end
-    if self._leftWing then return end  -- déjà initialisé
+    if self._leftWing then return end
 
-    local root   = data.root
-    local rootFL = root:GetFrameLevel() or 100
-    local size   = cfg.orbSize or 160
-    local btnSize = cfg.actionbar_tri_size or 44
+    local root    = data.root
+    local rootFL  = root:GetFrameLevel() or 100
+    local size    = cfg.orbSize or 160
+    local btnSize = cfg.actionbar_tri_size or 40
 
-    -- ── Aile droite ──────────────────────────────────────────────────────────
-    local rightWing = CreateFrame("Frame", "SUFRightWing", root)
-    rightWing:SetSize(size, size)
-    rightWing:SetPoint("CENTER", root, "CENTER", 0, 0)
-    rightWing:SetFrameLevel(rootFL + 6)
-    rightWing._orbSize     = size
-    rightWing._triMaskPath = (function()
-        local p = SUF.MEDIA and (SUF.MEDIA .. "tri_right.png") or nil
-        if p then
-            local f = CreateFrame("Frame"); f:Hide()
-            local t = f:CreateTexture()
-            local ok = pcall(t.SetTexture, t, p)
-            return ok and p or nil
-        end
-    end)()
+    local rCols = _parseColumns(cfg.actionbar_right_columns or "7,5,3,1")
+    local lCols = _parseColumns(cfg.actionbar_left_columns  or "7,5,3,1")
 
-    self._rightButtons = {}
-    local rBar   = cfg.actionbar_right_bar   or 3
-    local rStart = cfg.actionbar_right_start or 1
-    local rCount = cfg.actionbar_right_count or 12
-    for i = 1, rCount do
-        local slot = _actionSlot(rBar, rStart, i)
-        local btn  = _createButton(rightWing, slot, "SUFRightBtn" .. i)
-        if btn then
-            btn:SetSize(btnSize, btnSize)
-            self._rightButtons[i] = btn
-        end
-    end
-    _layoutWing(rightWing, self._rightButtons, btnSize, false)
-    self._rightWing = rightWing
+    self._rightWing, self._rightButtons = _buildWing(
+        "SUFRightWing", root, rootFL, size,
+        cfg.actionbar_right_bar or 6, cfg.actionbar_right_start or 1,
+        rCols, btnSize, false)
 
-    -- ── Aile gauche ──────────────────────────────────────────────────────────
-    local leftWing = CreateFrame("Frame", "SUFLeftWing", root)
-    leftWing:SetSize(size, size)
-    leftWing:SetPoint("CENTER", root, "CENTER", 0, 0)
-    leftWing:SetFrameLevel(rootFL + 6)
-    leftWing._orbSize     = size
-    leftWing._triMaskPath = (function()
-        local p = SUF.MEDIA and (SUF.MEDIA .. "tri_left.png") or nil
-        if p then
-            local f = CreateFrame("Frame"); f:Hide()
-            local t = f:CreateTexture()
-            local ok = pcall(t.SetTexture, t, p)
-            return ok and p or nil
-        end
-    end)()
-
-    self._leftButtons = {}
-    local lBar   = cfg.actionbar_left_bar   or 2
-    local lStart = cfg.actionbar_left_start or 1
-    local lCount = cfg.actionbar_left_count or 12
-    for i = 1, lCount do
-        local slot = _actionSlot(lBar, lStart, i)
-        local btn  = _createButton(leftWing, slot, "SUFLeftBtn" .. i)
-        if btn then
-            btn:SetSize(btnSize, btnSize)
-            self._leftButtons[i] = btn
-        end
-    end
-    _layoutWing(leftWing, self._leftButtons, btnSize, true)
-    self._leftWing = leftWing
+    self._leftWing, self._leftButtons = _buildWing(
+        "SUFLeftWing", root, rootFL, size,
+        cfg.actionbar_left_bar or 2, cfg.actionbar_left_start or 1,
+        lCols, btnSize, true)
 
     self:SetVisible(cfg.actionbars_enabled ~= false)
+    self:_ensureEvents()
+    self:UpdateAll()
 end
 
 function ActionBars:Prewarm()
-    -- Appelé sur PLAYER_ENTERING_WORLD (hors combat, post-DB)
-    if not self._leftWing then
-        self:Init()
+    if not self._leftWing then self:Init() end
+end
+
+-- ─── Pilotage icône / cooldown / état ─────────────────────────────────────────
+-- ActionButtonTemplate ne met PAS à jour l'icône tout seul : on la pilote via
+-- GetActionTexture / GetActionCooldown sur events.
+local function _updateButton(btn)
+    if not btn or not btn._actionSlot then return end
+    local slot   = btn._actionSlot
+    local iconTex = btn.icon or btn.Icon
+    local tex
+    local ok = pcall(function() tex = GetActionTexture(slot) end)
+    if iconTex then
+        if ok and tex then
+            iconTex:SetTexture(tex)
+            iconTex:SetAlpha(1)
+            if btn._fillTex then btn._fillTex:SetAlpha(0.35) end
+        else
+            iconTex:SetTexture(nil)
+            iconTex:SetAlpha(0)
+            if btn._fillTex then btn._fillTex:SetAlpha(1) end  -- triangle plein si slot vide
+        end
     end
+    -- Count (charges / consommables)
+    if btn.Count then
+        local cnt
+        pcall(function() cnt = GetActionCount(slot) end)
+        local has
+        pcall(function() has = IsConsumableAction(slot) or IsStackableAction(slot) end)
+        btn.Count:SetText((has and cnt and cnt > 0) and tostring(cnt) or "")
+    end
+    -- Cooldown
+    if btn.cooldown then
+        pcall(function()
+            local start, dur, enable = GetActionCooldown(slot)
+            if start and dur and dur > 0 and enable and enable ~= 0 then
+                btn.cooldown:SetCooldown(start, dur)
+            else
+                btn.cooldown:Clear()
+            end
+        end)
+    end
+end
+
+function ActionBars:UpdateAll()
+    if self._leftButtons  then for _, b in ipairs(self._leftButtons)  do _updateButton(b) end end
+    if self._rightButtons then for _, b in ipairs(self._rightButtons) do _updateButton(b) end end
+end
+
+-- Frame d'events (créé une fois)
+function ActionBars:_ensureEvents()
+    if self._evt then return end
+    local e = CreateFrame("Frame")
+    e:RegisterEvent("PLAYER_ENTERING_WORLD")
+    e:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+    e:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+    e:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+    e:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+    e:RegisterEvent("PLAYER_REGEN_ENABLED")
+    e:SetScript("OnEvent", function(_, ev, arg1)
+        if ev == "ACTIONBAR_SLOT_CHANGED" then
+            -- maj ciblée si possible
+            if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
+        else
+            if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
+        end
+    end)
+    self._evt = e
 end
 
 -- ─── Visibilité ──────────────────────────────────────────────────────────────
 function ActionBars:SetVisible(visible)
-    if self._rightWing then
-        if visible then self._rightWing:Show() else self._rightWing:Hide() end
-    end
-    if self._leftWing then
-        if visible then self._leftWing:Show() else self._leftWing:Hide() end
-    end
+    if self._rightWing then if visible then self._rightWing:Show() else self._rightWing:Hide() end end
+    if self._leftWing  then if visible then self._leftWing:Show()  else self._leftWing:Hide()  end end
 end
 
--- ─── Proc glow (LibCustomGlow ou NATIVE_RING pulse) ──────────────────────────
+-- ─── Proc glow / range tint ────────────────────────────────────────────────────
 function ActionBars:UpdateProcGlow()
     local cfg = SUF.db
     if not cfg or cfg.actionbar_glow_procs == false then return end
@@ -218,33 +325,23 @@ function ActionBars:UpdateProcGlow()
     local function glowBtn(btn)
         if not btn or not btn._actionSlot then return end
         local slot = btn._actionSlot
-        local ok, usable, nomana = pcall(IsUsableAction, slot)
+        local ok, usable = pcall(IsUsableAction, slot)
         if not ok then return end
-        local okReady, ready = pcall(IsActionInRange, slot)
-
-        -- Glow simple : teinter l'icône si utilisable + en portée
+        local okR, inRange = pcall(IsActionInRange, slot)
         local iconTex = btn.icon or btn.Icon
         if not iconTex then return end
-        local isReady = usable and (not okReady or ready ~= false)
-        if isReady then
-            iconTex:SetVertexColor(1, 1, 1, 1)
-        else
-            iconTex:SetVertexColor(0.5, 0.5, 0.5, 1)
-        end
+        local ready = usable and (not okR or inRange ~= false)
+        if ready then iconTex:SetVertexColor(1, 1, 1, 1)
+        else          iconTex:SetVertexColor(0.5, 0.5, 0.5, 1) end
     end
 
-    if self._leftButtons then
-        for _, b in ipairs(self._leftButtons) do glowBtn(b) end
-    end
-    if self._rightButtons then
-        for _, b in ipairs(self._rightButtons) do glowBtn(b) end
-    end
+    if self._leftButtons  then for _, b in ipairs(self._leftButtons)  do glowBtn(b) end end
+    if self._rightButtons then for _, b in ipairs(self._rightButtons) do glowBtn(b) end end
 end
 
--- ─── Rebuild (après changement de taille orbe) ────────────────────────────────
+-- ─── Rebuild (après changement layout/taille) ─────────────────────────────────
 function ActionBars:Rebuild()
     if InCombatLockdown() then return end
-    -- Détruire les ailes existantes
     if self._rightWing then self._rightWing:Hide(); self._rightWing = nil end
     if self._leftWing  then self._leftWing:Hide();  self._leftWing  = nil end
     self._rightButtons = nil

@@ -183,6 +183,31 @@ local function _dropdown(parent, label, options, key, x, y, onChange)
     return btn
 end
 
+-- Champ texte (ex: colonnes "7,5,3,1")
+local function _editbox(parent, label, key, x, y, onChange)
+    _label(parent, label, x, y)
+    local eb = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    eb:SetSize(120, 20)
+    eb:SetPoint("TOPLEFT", parent, "TOPLEFT", x + 8, y - 16)
+    eb:SetAutoFocus(false)
+    eb:SetFontObject("GameFontHighlightSmall")
+    if SUF.db and SUF.db[key] ~= nil then eb:SetText(tostring(SUF.db[key])) end
+    local function commit(self)
+        if SUF.db then
+            SUF.db[key] = self:GetText()
+            if onChange then onChange(self:GetText())
+            elseif SUF.RefreshAll then pcall(SUF.RefreshAll, SUF) end
+        end
+        self:ClearFocus()
+    end
+    eb:SetScript("OnEnterPressed", commit)
+    eb:SetScript("OnEscapePressed", function(self)
+        if SUF.db and SUF.db[key] ~= nil then self:SetText(tostring(SUF.db[key])) end
+        self:ClearFocus()
+    end)
+    return eb
+end
+
 -- ─── Construction principale ──────────────────────────────────────────────────
 local function _buildMain()
     if PSUI._frame then return end
@@ -244,13 +269,13 @@ local function _buildMain()
 
     -- ── Créer les onglets ────────────────────────────────────────────────────
     local tabDefs = {
-        "Sphère", "Couleurs", "Castbar", "Auras", "Minimap", "Modules"
+        "Sphère", "Couleurs", "Castbar", "Auras", "Barres", "Minimap", "Modules"
     }
 
     for i, name in ipairs(tabDefs) do
         local tab = CreateFrame("Button", nil, tabRow, "BackdropTemplate")
-        tab:SetSize(46, 22)
-        tab:SetPoint("LEFT", tabRow, "LEFT", (i-1)*48, 0)
+        tab:SetSize(42, 22)
+        tab:SetPoint("LEFT", tabRow, "LEFT", (i-1)*43, 0)
         pcall(function()
             tab:SetBackdrop({bgFile=WHITE, edgeFile=WHITE, edgeSize=1})
             tab:SetBackdropColor(0.1, 0.1, 0.15, 0.9)
@@ -273,6 +298,7 @@ local function _buildMain()
     PSUI:_BuildColorsPage()
     PSUI:_BuildCastbarPage()
     PSUI:_BuildAurasPage()
+    PSUI:_BuildActionBarsPage()
     PSUI:_BuildMinimapPage()
     PSUI:_BuildModulesPage()
 
@@ -406,7 +432,7 @@ function PSUI:_BuildAurasPage()
         {label="Anneau (ring)", value="ring"},
         {label="Arc",           value="arc"},
     }, "auras_mode", 8, -36, refreshAuras)
-    _slider(p, "Taille des icônes (px)", "auras_size", 16, 48, 1, 8, -76, refreshAuras)
+    _slider(p, "Zoom des icônes (px)", "auras_size", 14, 72, 1, 8, -76, refreshAuras)
     _slider(p, "Rayon (×orbRadius)", "auras_offset_radius", 1.0, 2.0, 0.05, 8, -118, refreshAuras)
     _slider(p, "Max debuffs", "auras_max_debuffs", 1, 16, 1, 8, -160)
     _slider(p, "Max buffs",   "auras_max_buffs",   1, 16, 1, 8, -202)
@@ -416,6 +442,37 @@ function PSUI:_BuildAurasPage()
     _check(p, "Timers",                "auras_show_timers",      8, -354)
     _check(p, "Seulement mes debuffs", "auras_debuff_mine_only", 8, -376)
     _check(p, "Seulement mes buffs",   "auras_buff_mine_only",   8, -398)
+end
+
+-- ─── Page Barres d'action ─────────────────────────────────────────────────────
+function PSUI:_BuildActionBarsPage()
+    local p = _newPage(self._content)
+    self._pages["Barres"] = p
+
+    local function rebuild()
+        if SUF.ActionBars then pcall(SUF.ActionBars.Rebuild, SUF.ActionBars) end
+    end
+
+    _check(p, "Activer les barres d'action", "actionbars_enabled", 8, -10, function(v)
+        if SUF.ActionBars then pcall(SUF.ActionBars.SetVisible, SUF.ActionBars, v) end
+        if v then rebuild() end
+    end)
+    _check(p, "Afficher les cadres", "actionbar_show_frames", 8, -32, rebuild)
+
+    _divider(p, -56)
+    _label(p, "Chaque triangle = 1 bouton. Colonnes = boutons.", 8, -62, 10)
+
+    _editbox(p, "Colonnes — aile gauche", "actionbar_left_columns",  8,  -82, rebuild)
+    _editbox(p, "Colonnes — aile droite", "actionbar_right_columns", 160, -82, rebuild)
+
+    _slider(p, "Barre WoW gauche (1-8)", "actionbar_left_bar",  1, 8, 1, 8,  -122, rebuild)
+    _slider(p, "Barre WoW droite (1-8)", "actionbar_right_bar", 1, 8, 1, 8,  -164, rebuild)
+
+    _divider(p, -200)
+    _slider(p, "Taille des triangles (px)", "actionbar_tri_size", 24, 64, 1, 8, -210, rebuild)
+    _slider(p, "Espacement (overlap)",       "actionbar_tri_spacing", 0.7, 1.2, 0.02, 8, -252, rebuild)
+    _slider(p, "Marge orbe (px)",            "actionbar_gap", 0, 40, 1, 8, -294, rebuild)
+    _slider(p, "Opacité cadre",              "actionbar_frame_alpha", 0.0, 1.0, 0.05, 8, -336, rebuild)
 end
 
 -- ─── Page Minimap ─────────────────────────────────────────────────────────────

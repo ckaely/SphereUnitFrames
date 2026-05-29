@@ -27,6 +27,7 @@ function Interaction:Init(data)
             SUF:Print("Impossible de déplacer en combat.")
             return
         end
+        self._moved = true
         self:StartMoving()
     end)
 
@@ -54,6 +55,15 @@ function Interaction:Init(data)
     root:SetScript("OnMouseUp", function(self, btn)
         if btn == "RightButton" then
             Interaction:ShowContextMenu()
+        elseif btn == "LeftButton" then
+            -- Ignore le clic qui suit un déplacement (drag)
+            if self._moved then self._moved = false; return end
+            -- Clic gauche : bascule sphère ↔ minimap (si activé)
+            if SUF.db and SUF.db.minimap_click_toggle
+               and (SUF.db.minimap_mode or "disabled") ~= "disabled"
+               and SUF.Minimap then
+                pcall(SUF.Minimap.Toggle, SUF.Minimap)
+            end
         end
     end)
 end

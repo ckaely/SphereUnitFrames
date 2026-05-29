@@ -614,6 +614,40 @@ function Orb:AnimTick(data, dt)
     end
 end
 
+-- ─── SetMapMode ────────────────────────────────────────────────────────────────
+-- mapOn=true : masque les couches HP/effets de fond pour laisser voir la carte,
+-- tout en GARDANT le verre/gloss/ombre/bordure au-dessus (sphère intégrée).
+-- Le gloss reste visible car overlayOrbFrame (root+4) > minimapHolder (root+2).
+function Orb:SetMapMode(data, mapOn)
+    if not data then data = SUF.player end
+    if not data then return end
+    local function setA(tex, a) if tex then pcall(tex.SetAlpha, tex, a) end end
+
+    if mapOn then
+        -- Couches qui cacheraient la carte → transparentes
+        setA(data.bgTex, 0)
+        setA(data.bgGalaxy, 0); setA(data.bgShimmer, 0)
+        setA(data.galaxy, 0);   setA(data.shimmer, 0)
+        setA(data.lightStar, 0); setA(data.emptyShadeTex, 0)
+        if data.hpBar then pcall(data.hpBar.SetAlpha, data.hpBar, 0) end
+        if data.hpText    then data.hpText:Hide() end
+        if data.hpSubText then data.hpSubText:Hide() end
+        -- On atténue un peu le verre pour ne pas noyer la carte
+        setA(data.glassTex, (SUF.db.orb_glass_alpha or 0.15) * 0.5)
+        setA(data.glassTex2, (SUF.db.orb_glass_alpha or 0.15) * 0.25)
+        setA(data.shadowTex, (SUF.db.orb_shadow_alpha or 0.35) * 0.6)
+        data._mapMode = true
+    else
+        -- Restaure l'orbe HP normale
+        if data.hpBar then pcall(data.hpBar.SetAlpha, data.hpBar, 1) end
+        if data.hpText    then data.hpText:SetShown(SUF.db.show_hp_percent ~= false) end
+        if data.hpSubText then data.hpSubText:SetShown(SUF.db.show_hp_absolute == true) end
+        data._mapMode = false
+        -- SoftUpdate remet tous les alphas/couleurs à leurs valeurs config
+        Orb:SoftUpdate(data)
+    end
+end
+
 -- ─── UpdateCC ────────────────────────────────────────────────────────────────
 -- Effet visuel quand le joueur est CC (futur).
 function Orb:UpdateCC(data, ccActive, ccColor)
