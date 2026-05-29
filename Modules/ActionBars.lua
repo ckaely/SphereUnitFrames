@@ -35,8 +35,10 @@ ActionBars._rightWing    = nil
 local function SNPM(n)
     return (SUF.MEDIA or "Interface\\AddOns\\SphereUnitFrames\\media\\") .. n
 end
-local TRI_UP   = SNPM("tri_up.png")
-local TRI_DOWN = SNPM("tri_down.png")
+local TRI_UP    = SNPM("tri_up.png")
+local TRI_DOWN  = SNPM("tri_down.png")
+local TRI_LEFT  = SNPM("tri_left.png")    -- ▷ base à gauche, pointe à DROITE
+local TRI_RIGHT = SNPM("tri_right.png")   -- ◁ base à droite, pointe à GAUCHE
 
 -- ─── Parsing colonnes ─────────────────────────────────────────────────────────
 -- "7,5,3,1" → { 7, 5, 3, 1 }
@@ -58,7 +60,7 @@ end
 
 -- ─── Création d'un bouton triangulaire ────────────────────────────────────────
 local _btnCount = 0
-local function _createButton(parent, actionSlot, up, btnSize, name)
+local function _createButton(parent, actionSlot, triPath, btnSize, name)
     if InCombatLockdown() then return nil end
     _btnCount = _btnCount + 1
     local btnName = name or ("SUFActionBtn" .. _btnCount)
@@ -72,9 +74,6 @@ local function _createButton(parent, actionSlot, up, btnSize, name)
     btn:SetAttribute("checkselfcast",  true)
     btn:SetAttribute("checkfocuscast", true)
     btn._actionSlot = actionSlot
-    btn._up = up
-
-    local triPath = up and TRI_UP or TRI_DOWN
 
     -- Masque triangulaire appliqué à l'icône
     local mask = btn:CreateMaskTexture()
@@ -162,8 +161,10 @@ local function _layoutWing(wing, buttons, columns, btnSize, isLeft)
     local gap     = cfg.actionbar_gap or 6
     local orbR    = (wing._orbSize or 160) * 0.5
 
-    local stepX = btnSize * 0.5 * spacing   -- demi-largeur → colonnes interlock
-    local stepY = btnSize * 0.5 * spacing   -- demi-hauteur → triangles interlock
+    -- stepY = pleine hauteur (triangles empilés bord à bord, pas de chevauchement
+    -- vertical → fini la "bouillie"). stepX = pleine largeur entre colonnes.
+    local stepX = btnSize * spacing
+    local stepY = btnSize * spacing
     local baseX = orbR + gap + btnSize * 0.5
 
     local idx = 1
@@ -192,14 +193,15 @@ local function _buildWing(name, root, rootFL, size, baseBar, startSlot, columns,
     wing._orbSize = size
 
     local buttons = {}
-    -- ordre de remplissage : △/▽ damier basé sur (colonne + rangée)
+    -- Aile horizontale → triangles pointant vers l'EXTÉRIEUR.
+    -- Aile droite : ▷ (tri_left, pointe à droite). Aile gauche : ◁ (tri_right).
+    local triPath = isLeft and TRI_RIGHT or TRI_LEFT
     local idx = 1
     for c = 1, #columns do
         local count = columns[c]
         for j = 1, count do
-            local up = ((c + j) % 2 == 0)
             local slot = _absSlot(baseBar, startSlot, idx)
-            local btn  = _createButton(wing, slot, up, btnSize, name .. "B" .. idx)
+            local btn  = _createButton(wing, slot, triPath, btnSize, name .. "B" .. idx)
             if btn then buttons[idx] = btn end
             idx = idx + 1
         end

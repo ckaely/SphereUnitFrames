@@ -25,6 +25,7 @@ SUF.Minimap = SUF.Minimap or {}
 local Minimap = SUF.Minimap
 
 local CIRCLE_MASK = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+local function SNPM(n) return (SUF.MEDIA or "Interface\\AddOns\\SphereUnitFrames\\media\\") .. n end
 
 Minimap._integrated       = false
 Minimap._pendingIntegrate = false
@@ -175,6 +176,8 @@ function Minimap:ShowMap()
     if data.minimapHolder then data.minimapHolder:Show() end
     if not data._mapMode and SUF.Orb then pcall(SUF.Orb.SetMapMode, SUF.Orb, data, true) end
     if SUF.db then SUF.db.minimap_shown = true end
+    self:EnsureHub()
+    if self._hub then self._hub:Show() end   -- le bouton reste TOUJOURS visible
 end
 
 function Minimap:ShowSphere()
@@ -183,6 +186,8 @@ function Minimap:ShowSphere()
     -- ne réinitialise l'orbe que si on était réellement en mode carte
     if data and data._mapMode and SUF.Orb then pcall(SUF.Orb.SetMapMode, SUF.Orb, data, false) end
     if SUF.db then SUF.db.minimap_shown = false end
+    self:EnsureHub()
+    if self._hub then self._hub:Show() end   -- le bouton reste TOUJOURS visible
 end
 
 function Minimap:Toggle()
@@ -258,8 +263,19 @@ function Minimap:EnsureHub()
     ic:SetSize(18, 18)
     ic:SetTexture("Interface\\Minimap\\Tracking\\None")
     pcall(function() ic:SetTexture("Interface\\Icons\\INV_Misc_Map_01") end)
+    pcall(function() ic:SetTexCoord(0.08, 0.92, 0.08, 0.92) end)
     pcall(function() ic:AddMaskTexture(mask) end)
     hub._icon = ic
+
+    -- Anneau bordure doré pour le rendre bien visible
+    local ring = hub:CreateTexture(nil, "OVERLAY")
+    ring:SetPoint("CENTER")
+    ring:SetSize(30, 30)
+    ring:SetTexture(SNPM("orb-border"))
+    ring:SetBlendMode("ADD")
+    ring:SetVertexColor(0.95, 0.78, 0.20, 1)
+    hub._ring = ring
+    hub:Show()
 
     hub:SetScript("OnClick", function(self, btn)
         if btn == "LeftButton" then

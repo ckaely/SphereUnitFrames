@@ -47,6 +47,21 @@ local function SNPM(n)
 end
 local pi, cos, sin, abs = math.pi, math.cos, math.sin, math.abs
 
+-- ─── Helpers d'animation natifs (AnimationGroup) — fidèles à SNP ──────────────
+local function AddRotation(tex, degrees, duration, startDelay)
+    local ok, ag = pcall(function()
+        local g   = tex:CreateAnimationGroup()
+        local rot = g:CreateAnimation("Rotation")
+        rot:SetDegrees(degrees)
+        rot:SetDuration(duration)
+        if startDelay then rot:SetStartDelay(startDelay) end
+        g:SetLooping("REPEAT")
+        g:Play()
+        return g
+    end)
+    return ok and ag or nil
+end
+
 -- ─── CreatePlayer ─────────────────────────────────────────────────────────────
 -- Crée la frame sphère joueur unique. Appelée depuis Core:Initialize().
 function Orb:CreatePlayer()
@@ -223,6 +238,45 @@ function Orb:CreatePlayer()
     data.lightStar    = lightStar
     data._starAngle   = 0
 
+    -- ── Vague liquide (orb_filling1 / orb_filling4, rotation native) ──────────
+    -- Couches DiabolicUI : overlays ADD en rotation lente → effet liquide 3D.
+    local wA = cfg.orb_wave_alpha or 0.38
+    local wDur = cfg.orb_wave_speed or 22
+    local waveT1 = hpFxClipFrame:CreateTexture(nil, "ARTWORK", nil, 5)
+    waveT1:SetTexture(SNPM("orb_filling1"))
+    waveT1:SetAllPoints(orb)
+    waveT1:SetBlendMode("ADD")
+    waveT1:SetAlpha(wA)
+    waveT1:AddMaskTexture(mask)
+    waveT1:AddMaskTexture(hpEffectMask)
+    waveT1:AddMaskTexture(hpFxClipMask)
+    if cfg.orb_wave_enabled ~= false then waveT1._rot = AddRotation(waveT1, 360, wDur)
+    else waveT1:Hide() end
+    data.waveT1 = waveT1
+
+    local waveT2 = hpFxClipFrame:CreateTexture(nil, "ARTWORK", nil, 6)
+    waveT2:SetTexture(SNPM("orb_filling4"))
+    waveT2:SetAllPoints(orb)
+    waveT2:SetBlendMode("ADD")
+    waveT2:SetAlpha(wA * 0.65)
+    waveT2:AddMaskTexture(mask)
+    waveT2:AddMaskTexture(hpEffectMask)
+    waveT2:AddMaskTexture(hpFxClipMask)
+    if cfg.orb_wave_enabled ~= false then waveT2._rot = AddRotation(waveT2, -360, wDur * 1.4, 3)
+    else waveT2:Hide() end
+    data.waveT2 = waveT2
+
+    -- ── Spark : ligne de flottaison HP (ancré fillTex:TOP, cross-frame) ───────
+    local spark = hpFxClipFrame:CreateTexture(nil, "OVERLAY", nil, 7)
+    spark:SetTexture(SNPM("orb_spark"))
+    spark:SetSize(size * 0.88, size * 0.10)
+    spark:SetPoint("CENTER", fillTex, "TOP", 0, 0)
+    spark:SetBlendMode("ADD")
+    spark:SetAlpha(cfg.orb_spark_alpha or 0.80)
+    spark:AddMaskTexture(mask)
+    spark:SetShown(cfg.orb_spark_enabled ~= false)
+    data.spark = spark
+
     -- ── overlayOrbFrame (root+4) — glass, gloss, shadows ──────────────────
     local overlayOrbFrame = CreateFrame("Frame", nil, root)
     overlayOrbFrame:SetAllPoints(orb)
@@ -278,6 +332,17 @@ function Orb:CreatePlayer()
     glossTex:AddMaskTexture(hpEffectMask)
     glossTex:AddMaskTexture(mask)
     data.glossTex = glossTex
+
+    -- Low-HP glow : halo rouge pulsé quand HP critiques (orb_lowhp_glow.tga)
+    local lowhpGlow = overlayOrbFrame:CreateTexture(nil, "OVERLAY", nil, 1)
+    lowhpGlow:SetTexture(SNPM("orb_lowhp_glow"))
+    lowhpGlow:SetSize(size * 1.15, size * 1.15)
+    lowhpGlow:SetPoint("CENTER", orb, "CENTER", 0, 0)
+    lowhpGlow:SetBlendMode("ADD")
+    lowhpGlow:SetVertexColor(1.0, 0.10, 0.10, 1)
+    lowhpGlow:SetAlpha(0)
+    data.lowhpGlow  = lowhpGlow
+    data._glowTime  = 0
 
     -- ── emptyShadeFrame (root+7) — voile zone vide ─────────────────────────
     -- Ancré TOP sur l'orbe, BOTTOM sur fillTex:TOP. Suit géométrie C-side.
@@ -388,6 +453,19 @@ function Orb:SoftUpdate(data)
         data.lightStar:SetVertexColor(1, 1, 1, cfg.orb_midnight_star_alpha or 0.6)
     end
 
+    -- Vague liquide : visibilité + alpha
+    if data.waveT1 then
+        local wOn = cfg.orb_wave_enabled ~= false
+        local wA  = cfg.orb_wave_alpha or 0.38
+        data.waveT1:SetShown(wOn); data.waveT1:SetAlpha(wA)
+        if data.waveT2 then data.waveT2:SetShown(wOn); data.waveT2:SetAlpha(wA * 0.65) end
+    end
+    -- Spark
+    if data.spark then
+        data.spark:SetShown(cfg.orb_spark_enabled ~= false)
+        data.spark:SetAlpha(cfg.orb_spark_alpha or 0.80)
+    end
+
     -- Zone vide
     if data.emptyShadeTex then
         local a = (cfg.orb_empty_shade_enabled) and (cfg.orb_empty_shade_alpha or 0.45) or 0.0
@@ -436,13 +514,24 @@ function Orb:ApplyBorderStyle(data)
     local tex   = data.borderTex
     if not tex then return end
 
+    -- Bordure désactivée
+    if cfg.borderEnabled == false then tex:SetAlpha(0); return end
+
+    -- Couleur bordure : classe ou custom (fidèle SNP GetBorderColor)
+    local bR, bG, bB = cfg.borderR or 1, cfg.borderG or 0.8, cfg.borderB or 0
+    if cfg.borderColorMode == "classe" then
+        local ok, _, eng = pcall(UnitClass, "player")
+        local cc = ok and eng and RAID_CLASS_COLORS and RAID_CLASS_COLORS[eng]
+        if cc then bR, bG, bB = cc.r, cc.g, cc.b end
+    end
+
     if not info or not info.path then
         -- Style "solide" : orb-border.tga (anneau circulaire SNP) autour de l'orbe.
         -- Taille légèrement > orbSize → visible en anneau autour du cercle.
         -- Couleur mise à jour par UpdateFill() pour suivre la couleur de classe.
         tex:SetTexture(SNPM("orb-border"))
         tex:SetBlendMode("ADD")
-        tex:SetVertexColor(cfg.borderR or 1, cfg.borderG or 0.8, cfg.borderB or 0, cfg.borderA or 1)
+        tex:SetVertexColor(bR, bG, bB, cfg.borderA or 1)
         tex:SetAlpha(cfg.borderA or 1)
         local sz = (cfg.orbSize or 160) * (cfg.border_size_ratio or 1.5)
         tex:ClearAllPoints()
@@ -499,6 +588,12 @@ function Orb:UpdateFill(data, ratio)
     if data.shimmer then data.shimmer:SetVertexColor(
         r * 0.6 + g * 0.4, g * 0.4 + b * 0.6, b, sa) end
 
+    -- Vague liquide teintée couleur fill (fidèle SNP)
+    local wa = cfg.orb_wave_enabled ~= false and (cfg.orb_wave_alpha or 0.38) or 0
+    if data.waveT1 then data.waveT1:SetVertexColor(r, g, b, wa) end
+    if data.waveT2 then data.waveT2:SetVertexColor(
+        r * 0.85, g * 0.85, math.min(1, b * 1.15), wa * 0.65) end
+
     -- Light star couleur
     if data.lightStar and cfg.orb_midnight_star and cfg.orb_midnight_star_class_color then
         data.lightStar:SetVertexColor(r, g, b, cfg.orb_midnight_star_alpha or 0.6)
@@ -509,15 +604,7 @@ function Orb:UpdateFill(data, ratio)
         data.hpBar:SetStatusBarColor(r, g, b, cfg.orb_hp_fill_alpha or 0.88)
     end
 
-    -- Bordure "solide" suit la couleur de classe/fill
-    if data.borderTex then
-        local bStyle = cfg.borderStyle or "solide"
-        local bInfo  = SUF.BORDER_STYLES[bStyle]
-        if not bInfo or not bInfo.path then
-            -- Style solide : teinte de la bordure = couleur de classe
-            data.borderTex:SetVertexColor(r, g, b, cfg.borderA or 1.0)
-        end
-    end
+    -- Bordure : couleur gérée par ApplyBorderStyle (classe/custom), pas par le fill.
 end
 
 -- ─── UpdateHPText ────────────────────────────────────────────────────────────
@@ -612,6 +699,20 @@ function Orb:AnimTick(data, dt)
         data.bgGalaxy:SetRotation(angle)
         data.galaxy:SetRotation(angle)
     end
+
+    -- Low-HP glow : halo rouge pulsé sous le seuil
+    if data.lowhpGlow then
+        local ratio = data.displayHP or data.targetHP or 1.0
+        local thr   = cfg.orb_lowhp_threshold or 0.25
+        if cfg.orb_lowhp_glow_enabled ~= false and ratio <= thr then
+            data._glowTime = (data._glowTime or 0) + dt
+            data.lowhpGlow:SetAlpha(0.20 + 0.18 * abs(sin(data._glowTime * 2.0)))
+        else
+            local a = data.lowhpGlow:GetAlpha()
+            if a > 0 then data.lowhpGlow:SetAlpha(math.max(0, a - dt * 2.5))
+            else data._glowTime = 0 end
+        end
+    end
 end
 
 -- ─── SetMapMode ────────────────────────────────────────────────────────────────
@@ -629,6 +730,8 @@ function Orb:SetMapMode(data, mapOn)
         setA(data.bgGalaxy, 0); setA(data.bgShimmer, 0)
         setA(data.galaxy, 0);   setA(data.shimmer, 0)
         setA(data.lightStar, 0); setA(data.emptyShadeTex, 0)
+        setA(data.waveT1, 0);   setA(data.waveT2, 0)
+        setA(data.spark, 0);    setA(data.lowhpGlow, 0)
         if data.hpBar then pcall(data.hpBar.SetAlpha, data.hpBar, 0) end
         if data.hpText    then data.hpText:Hide() end
         if data.hpSubText then data.hpSubText:Hide() end

@@ -75,6 +75,9 @@ SUF.defaults = {
         -- Couleur fill
         fill_color_mode  = "class",   -- "class" | "fixed" | "progressive"
         fill_r           = 1.0, fill_g = 0.2, fill_b = 0.2,
+        fill_saturation  = 1.0,       -- saturation appliquée à la couleur fill
+        fill_alpha       = 0.88,      -- opacité de la couleur FX (galaxy/shimmer/wave)
+        classColorSphere = false,     -- force couleur de classe (override fixed)
 
         -- Fonds / ombres
         bgAlpha               = 0.75,
@@ -100,19 +103,32 @@ SUF.defaults = {
         orb_galaxy_alpha        = 0.15,
         orb_shimmer_enabled     = true,
         orb_shimmer_alpha       = 0.22,
-        orb_wave_enabled        = false,
-        orb_wave_alpha          = 0.30,
+        -- Vague liquide (textures DiabolicUI orb_filling1/4, rotation native)
+        orb_wave_enabled        = true,
+        orb_wave_alpha          = 0.38,
+        orb_wave_speed          = 22,    -- durée (s) d'une rotation complète (petit = rapide)
+        -- Spark : ligne de flottaison HP (suit fillTex:TOP)
+        orb_spark_enabled       = true,
+        orb_spark_alpha         = 0.80,
+        -- Glow HP critique (orb_lowhp_glow.tga, pulsé)
+        orb_lowhp_glow_enabled  = true,
+        orb_lowhp_threshold     = 0.25,
+        -- Midnight star
         orb_midnight_star       = false,
-        orb_midnight_star_alpha = 0.60,
-        orb_midnight_star_scale = 1.0,
+        orb_midnight_star_alpha = 0.55,
+        orb_midnight_star_scale = 1.18,
         orb_midnight_star_speed = 1.0,
         orb_midnight_star_dir   = 1,
         orb_midnight_star_class_color = false,
 
         -- Bordure décorative
+        borderEnabled     = true,
         borderStyle = "solide",
         borderR = 1.0, borderG = 0.8, borderB = 0.0, borderA = 1.0,
-        border_size_ratio = 1.5,
+        borderWidth       = 6,           -- épaisseur (px) de l'anneau solide
+        borderColorMode   = "custom",    -- "custom" | "classe"
+        border_glow_pulse = false,       -- pulsation alpha de l'overlay
+        border_size_ratio = 1.5,         -- = borderOverlayScale (SNP)
 
         -- Textes HP
         show_hp_percent  = true,
@@ -304,32 +320,49 @@ end
 -- ─── ResolveFillColor ─────────────────────────────────────────────────────────
 -- Retourne r, g, b selon fill_color_mode + ratio HP.
 -- Ne lit PAS UnitHealth directement — utilise le ratio déjà résolu.
+-- Saturation : mélange vers le gris luma (sat=1 → inchangé, 0 → gris)
+local function _applySaturation(r, g, b, sat)
+    sat = sat or 1
+    local gray = (r * 0.299) + (g * 0.587) + (b * 0.114)
+    local function cl(v) return math.max(0, math.min(1, v)) end
+    return cl(gray + (r - gray) * sat),
+           cl(gray + (g - gray) * sat),
+           cl(gray + (b - gray) * sat)
+end
+
 function SUF:ResolveFillColor(cfg, ratio)
     ratio = ratio or 1.0
     local mode = cfg.fill_color_mode or "class"
+    -- classColorSphere force la couleur de classe (override fixed/custom) — fidèle SNP
+    if cfg.classColorSphere == true and (mode == "fixed" or mode == "custom" or mode == nil) then
+        mode = "class"
+    end
 
+    local r, g, b
     if mode == "class" then
         local ok, _, englishClass = pcall(UnitClass, "player")
         if ok and englishClass then
             local cc = RAID_CLASS_COLORS and RAID_CLASS_COLORS[englishClass]
-            if cc then return cc.r, cc.g, cc.b end
+            if cc then r, g, b = cc.r, cc.g, cc.b end
         end
-        return 1.0, 1.0, 1.0
+        if not r then r, g, b = 1.0, 1.0, 1.0 end
 
     elseif mode == "progressive" then
         if ratio > 0.75 then
-            return cfg.fill_prog_high_r, cfg.fill_prog_high_g, cfg.fill_prog_high_b
+            r, g, b = cfg.fill_prog_high_r, cfg.fill_prog_high_g, cfg.fill_prog_high_b
         elseif ratio > 0.50 then
-            return cfg.fill_prog_mid_r,  cfg.fill_prog_mid_g,  cfg.fill_prog_mid_b
+            r, g, b = cfg.fill_prog_mid_r,  cfg.fill_prog_mid_g,  cfg.fill_prog_mid_b
         elseif ratio > 0.25 then
-            return cfg.fill_prog_low_r,  cfg.fill_prog_low_g,  cfg.fill_prog_low_b
+            r, g, b = cfg.fill_prog_low_r,  cfg.fill_prog_low_g,  cfg.fill_prog_low_b
         else
-            return cfg.fill_prog_crit_r, cfg.fill_prog_crit_g, cfg.fill_prog_crit_b
+            r, g, b = cfg.fill_prog_crit_r, cfg.fill_prog_crit_g, cfg.fill_prog_crit_b
         end
 
     else -- "fixed"
-        return cfg.fill_r or 1.0, cfg.fill_g or 0.2, cfg.fill_b or 0.2
+        r, g, b = cfg.fill_r or 1.0, cfg.fill_g or 0.2, cfg.fill_b or 0.2
     end
+
+    return _applySaturation(r, g, b, cfg.fill_saturation or 1.0)
 end
 
 -- ─── ClampPos ────────────────────────────────────────────────────────────────

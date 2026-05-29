@@ -213,7 +213,7 @@ local function _buildMain()
     if PSUI._frame then return end
 
     local f = CreateFrame("Frame", "SUFConfigPanel", UIParent, "BackdropTemplate")
-    f:SetSize(320, 480)
+    f:SetSize(320, 600)
     f:SetFrameStrata("HIGH")
     f:SetFrameLevel(100)
     f:SetMovable(true)
@@ -257,7 +257,7 @@ local function _buildMain()
 
     -- Zone de contenu
     local content = CreateFrame("Frame", nil, f)
-    content:SetSize(306, 420)
+    content:SetSize(306, 538)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 7, -58)
     content:SetClipsChildren(true)
 
@@ -349,10 +349,19 @@ function PSUI:_BuildSpherePage()
     _check(p, "Shimmer (reflet)", "orb_shimmer_enabled", 8, -244)
     _check(p, "Wave (vague)", "orb_wave_enabled", 8, -266)
     _check(p, "Midnight Star", "orb_midnight_star", 8, -288)
+    _slider(p, "Galaxy — opacité", "orb_galaxy_alpha", 0.0, 0.6, 0.01, 160, -222)
+    _slider(p, "Shimmer — opacité", "orb_shimmer_alpha", 0.0, 0.6, 0.01, 160, -264)
     _divider(p, -310)
-    _check(p, "Zone vide — effacement (clear)", "orb_empty_clear_enabled", 8, -317)
-    _check(p, "Zone vide — ombrage", "orb_empty_shade_enabled", 8, -339)
-    _slider(p, "Zone vide — Opacité ombre", "orb_empty_shade_alpha", 0.0, 1.0, 0.01, 8, -361)
+    _check(p, "Vague liquide", "orb_wave_enabled", 8, -317)
+    _slider(p, "Vague — opacité", "orb_wave_alpha", 0.0, 1.0, 0.01, 160, -317)
+    _check(p, "Spark (ligne de vie)", "orb_spark_enabled", 8, -345)
+    _check(p, "Glow HP critique",     "orb_lowhp_glow_enabled", 160, -345)
+    _check(p, "Ombre intérieure",     "orb_shadow2_enabled", 8, -367)
+    _slider(p, "Ombre — opacité",     "orb_shadow_alpha", 0.0, 1.0, 0.01, 160, -367)
+    _divider(p, -404)
+    _check(p, "Zone vide — effacement (clear)", "orb_empty_clear_enabled", 8, -411)
+    _check(p, "Zone vide — ombrage", "orb_empty_shade_enabled", 8, -433)
+    _slider(p, "Zone vide — Opacité ombre", "orb_empty_shade_alpha", 0.0, 1.0, 0.01, 8, -455)
 end
 
 -- ─── Page Couleurs ────────────────────────────────────────────────────────────
@@ -367,27 +376,40 @@ function PSUI:_BuildColorsPage()
     }, "fill_color_mode", 8, -10, function(v)
         if SUF.RefreshAll then pcall(SUF.RefreshAll, SUF) end
     end)
+    _check(p, "Forcer couleur de classe", "classColorSphere", 160, -22)
+    _slider(p, "Saturation", "fill_saturation", 0.0, 2.0, 0.05, 8, -52)
+    _slider(p, "Opacité FX (galaxy/wave)", "fill_alpha", 0.0, 1.0, 0.01, 160, -52)
 
-    _divider(p, -52)
-    _label(p, "Couleur fixe (R / G / B)", 8, -58, 11)
-    _slider(p, "R", "fill_r", 0.0, 1.0, 0.01, 8,  -72)
-    _slider(p, "G", "fill_g", 0.0, 1.0, 0.01, 8, -114)
-    _slider(p, "B", "fill_b", 0.0, 1.0, 0.01, 8, -156)
+    _divider(p, -90)
+    _label(p, "Couleur fixe (R / G / B)", 8, -96, 11)
+    _slider(p, "R", "fill_r", 0.0, 1.0, 0.01, 8,  -110)
+    _slider(p, "G", "fill_g", 0.0, 1.0, 0.01, 160, -110)
+    _slider(p, "B", "fill_b", 0.0, 1.0, 0.01, 8, -152)
+    _slider(p, "Alpha HP fill", "orb_hp_fill_alpha", 0.0, 1.0, 0.01, 160, -152)
 
-    _divider(p, -194)
-    _label(p, "Bordure décorative", 8, -200, 11)
+    _divider(p, -190)
+    _label(p, "Bordure décorative", 8, -196, 11)
+    _check(p, "Activée", "borderEnabled", 8, -210)
     _dropdown(p, "Style", {
         {label="Solide",       value="solide"},
         {label="Horde",        value="wow_horde"},
         {label="Alliance",     value="wow_alliance"},
         {label="Horde Fer",    value="ns_horde"},
         {label="Alliance Or",  value="ns_alliance"},
-    }, "borderStyle", 8, -216)
-    _slider(p, "Opacité", "borderA", 0.0, 1.0, 0.01, 8, -256)
+    }, "borderStyle", 8, -244)
+    _dropdown(p, "Couleur", {
+        {label="Custom", value="custom"},
+        {label="Classe", value="classe"},
+    }, "borderColorMode", 160, -244)
+    _slider(p, "Opacité bordure", "borderA", 0.0, 1.0, 0.01, 8, -286)
+    _slider(p, "Taille bordure (×)", "border_size_ratio", 1.0, 2.5, 0.05, 160, -286)
 
-    _divider(p, -294)
-    _label(p, "HP Fill visible (0 = moteur C seul)", 8, -300, 11)
-    _slider(p, "Alpha HP fill (layer Lua)", "orb_hp_fill_alpha", 0.0, 1.0, 0.01, 8, -314)
+    _divider(p, -322)
+    _label(p, "Midnight Star", 8, -328, 11)
+    _slider(p, "Opacité", "orb_midnight_star_alpha", 0.0, 1.0, 0.01, 8, -342)
+    _slider(p, "Échelle", "orb_midnight_star_scale", 0.5, 2.0, 0.05, 160, -342)
+    _slider(p, "Vitesse", "orb_midnight_star_speed", 0.0, 3.0, 0.1, 8, -384)
+    _check(p, "Couleur de classe", "orb_midnight_star_class_color", 160, -396)
 end
 
 -- ─── Page Castbar ─────────────────────────────────────────────────────────────
