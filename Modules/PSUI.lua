@@ -370,6 +370,7 @@ function PSUI:_BuildSpherePage()
     _slider(p, "Vague — opacité", "orb_wave_alpha", 0.0, 1.0, 0.01, 160, -317)
     _check(p, "Spark (ligne de vie)", "orb_spark_enabled", 8, -345)
     _check(p, "Glow HP critique",     "orb_lowhp_glow_enabled", 160, -345)
+    _check(p, "Onde de dégâts (ripple)", "orb_target_ripple",   160, -389)
     _check(p, "Ombre intérieure",     "orb_shadow2_enabled", 8, -367)
     _slider(p, "Ombre — opacité",     "orb_shadow_alpha", 0.0, 1.0, 0.01, 160, -367)
     _divider(p, -404)
@@ -446,13 +447,18 @@ function PSUI:_BuildCastbarPage()
     _dropdown(p, "Style", {
         {label="Circulaire",       value="circular"},
         {label="Classique",        value="classic"},
+        {label="Segments",         value="segments"},
         {label="Collapse Glow",    value="collapse_glow"},
     }, "castbar_style", 8, -36)
     _dropdown(p, "Preset", {
         {label="Minimal",   value="minimal"},
         {label="Overwatch", value="overwatch"},
         {label="Techno",    value="techno"},
-    }, "castbar_preset", 160, -36)
+    }, "castbar_preset", 160, -36, function(v)
+        if SUF.CastBar and SUF.CastBar.ApplyPreset then
+            pcall(SUF.CastBar.ApplyPreset, SUF.CastBar, v)
+        end
+    end)
 
     _divider(p, -82)
     _label(p, "Affichage", 8, -88, 11)
@@ -653,6 +659,35 @@ function PSUI:_BuildModulesPage()
     _label(p, "|cFFFF8800Performance Monitor|r", 8, -334, 11)
     _check(p, "Activer le profiler", "perf_enabled", 8, -344)
     _slider(p, "Seuil d'alerte (ms)", "perf_seuil_ms", 1.0, 30.0, 0.5, 8, -368)
+
+    _divider(p, -406)
+    _label(p, "|cFFAACCFFProfils|r", 8, -412, 11)
+    local list = (SUF.Profiles and SUF.Profiles:List()) or {}
+    local cur  = (SUF.Profiles and SUF.Profiles:Current()) or "Default"
+    local opts = {}
+    for _, n in ipairs(list) do opts[#opts+1] = {label=n, value=n} end
+    if #opts == 0 then opts[1] = {label=cur, value=cur} end
+    _dropdown(p, "Profil actuel", opts, "_dummy_profile", 8, -428, function(v)
+        if SUF.Profiles then pcall(SUF.Profiles.SwitchTo, SUF.Profiles, v) end
+    end)
+    -- Boutons profil
+    local function _profBtn(label, x, y, action)
+        local b = CreateFrame("Button", nil, p, "BackdropTemplate")
+        b:SetSize(72, 22)
+        b:SetPoint("TOPLEFT", p, "TOPLEFT", x, y)
+        pcall(function()
+            b:SetBackdrop({bgFile=WHITE, edgeFile=WHITE, edgeSize=1})
+            b:SetBackdropColor(0.10, 0.10, 0.16, 0.95)
+            b:SetBackdropBorderColor(0.45, 0.45, 0.6, 1)
+        end)
+        local fs = b:CreateFontString(nil, "OVERLAY")
+        _font(fs, 10); fs:SetAllPoints(b); fs:SetJustifyH("CENTER")
+        fs:SetText(label); fs:SetTextColor(1, 0.95, 0.8, 1)
+        b:SetScript("OnClick", action)
+        return b
+    end
+    _profBtn("Reset",     8,   -470, function() if SUF.Profiles then pcall(SUF.Profiles.Reset, SUF.Profiles) end end)
+    _profBtn("Dupliquer", 84,  -470, function() if SUF.Profiles and SUF.Profiles:Current() then pcall(SUF.Profiles.Duplicate, SUF.Profiles, SUF.Profiles:Current()) end end)
 end
 
 -- ─── API publique ─────────────────────────────────────────────────────────────

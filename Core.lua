@@ -27,7 +27,8 @@ local function Initialize()
     -- AceDB
     local AceDB = LibStub and LibStub("AceDB-3.0", true)
     if AceDB then
-        SUF.db = AceDB:New("SUFDB", SUF.defaults, true).profile
+        SUF.dbroot = AceDB:New("SUFDB", SUF.defaults, true)
+        SUF.db     = SUF.dbroot.profile
     else
         -- Fallback sans AceDB (deep copy des defaults)
         SUFDB = SUFDB or {}

@@ -300,6 +300,8 @@ function CastBar:_OnEvent(event, unit, ...)
             sc:SetFromScale(1.6, 1.6); sc:SetToScale(0.4, 0.4); sc:SetDuration(dur)
             fadeOut:Play()
         end
+        -- Kick FX shards (port SNP)
+        pcall(self.SpawnKickShards, self, data)
         C_Timer.After(0.4, function()
             if data.castbar and not data.castbar.active then return end
             CastBar:Reset(data)
@@ -352,8 +354,10 @@ function CastBar:_StartCast(data, isChannel, spellId, startSec, endSec, interrup
     local showPill  = (mode == "classic")
 
     local showCollapse = (mode == "collapse_glow")
+    local showSegments = (mode == "segments")
+    if showSegments then self:BuildSegments(data) end
     if cb.arcFrame then
-        if showCirc or showCollapse then cb.arcFrame:Show() else cb.arcFrame:Hide() end
+        if showCirc or showCollapse or showSegments then cb.arcFrame:Show() else cb.arcFrame:Hide() end
     end
     if cb.pill then
         if showPill then cb.pill:Show() else cb.pill:Hide() end
@@ -430,6 +434,13 @@ function CastBar:Tick(data, now)
         end
     end
 
+    -- Mode segments : éclaire les ticks au prorata
+    if cb._segs and (cfg.castbar_style == "segments") then
+        local p = math.max(0, math.min(1, (now - cb.startTime) / dur))
+        if cb.channeling then p = 1 - p end
+        self:UpdateSegments(data, p)
+    end
+
     -- Collapse Glow Ring : grand anneau qui rétrécit vers l'arc
     if cb.collapseRing and cb.collapseRing:IsShown() then
         local p = math.max(0, math.min(1, (now - cb.startTime) / dur))
@@ -448,6 +459,132 @@ function CastBar:Tick(data, now)
     -- Expiration
     if now >= cb.endTime + 0.30 then
         self:Reset(data)
+    end
+end
+
+-- ─── Presets (port SNP : minimal / overwatch / techno) ───────────────────────
+local CASTBAR_PRESETS = {
+    minimal = {
+        castbar_style          = "circular",
+        castbar_show_track     = true,
+        castbar_show_ticks     = false,
+        castbar_show_pin12     = false,
+        castbar_glow_intensity = 0.8,
+        castbar_complete_flash = true,
+        castbar_arc_thickness  = 10,
+        castbar_collapse_alpha = 0.75,
+    },
+    overwatch = {
+        castbar_style          = "collapse_glow",
+        castbar_show_track     = true,
+        castbar_show_ticks     = false,
+        castbar_show_pin12     = true,
+        castbar_glow_intensity = 1.4,
+        castbar_complete_flash = true,
+        castbar_arc_thickness  = 16,
+        castbar_collapse_start_scale = 2.0,
+        castbar_collapse_end_scale   = 0.65,
+        castbar_collapse_alpha       = 0.92,
+        castbar_collapse_glow_pulse  = true,
+    },
+    techno = {
+        castbar_style          = "segments",
+        castbar_show_track     = true,
+        castbar_show_ticks     = true,
+        castbar_show_pin12     = true,
+        castbar_glow_intensity = 1.6,
+        castbar_v8_segments    = true,
+        castbar_v8_count       = 18,
+        castbar_arc_thickness  = 14,
+    },
+}
+
+function CastBar:ApplyPreset(name)
+    local p = CASTBAR_PRESETS[name]
+    if not p or not SUF.db then return end
+    for k, v in pairs(p) do SUF.db[k] = v end
+    SUF.db.castbar_preset = name
+    if SUF.player then
+        self:Reset(SUF.player)
+        if SUF.RefreshAll then pcall(SUF.RefreshAll, SUF) end
+    end
+end
+
+-- ─── Kick FX (shards rouges en explosion sur interrupt) ──────────────────────
+local SHARD_COUNT = 8
+function CastBar:SpawnKickShards(data)
+    local cb = data and data.castbar
+    if not cb or not cb.arcFrame then return end
+    if not (SUF.db and SUF.db.castbar_show_kick_fx ~= false) then return end
+    local af = cb.arcFrame
+    local size = af:GetWidth() or 200
+    cb._shardPool = cb._shardPool or {}
+    for i = 1, SHARD_COUNT do
+        local s = cb._shardPool[i]
+        if not s then
+            s = af:CreateTexture(nil, "OVERLAY", nil, 4)
+            s:SetTexture("Interface\\AddOns\\SphereUnitFrames\\media\\tri_up.png")
+            s:SetSize(10, 10)
+            s:SetBlendMode("ADD")
+            s:SetVertexColor(0.95, 0.18, 0.18, 1)
+            cb._shardPool[i] = s
+        end
+        s:ClearAllPoints()
+        s:SetPoint("CENTER", af, "CENTER", 0, 0)
+        s:SetAlpha(1)
+        s:Show()
+        -- Animation : translation radiale + fade
+        local angle = (i / SHARD_COUNT) * 2 * math.pi
+        local dx = math.cos(angle) * size * 0.6
+        local dy = math.sin(angle) * size * 0.6
+        local g  = s:CreateAnimationGroup()
+        local tr = g:CreateAnimation("Translation")
+        tr:SetOffset(dx, dy); tr:SetDuration(0.45)
+        local fa = g:CreateAnimation("Alpha")
+        fa:SetFromAlpha(1); fa:SetToAlpha(0); fa:SetDuration(0.45)
+        local sc = g:CreateAnimation("Scale")
+        sc:SetFromScale(1.0, 1.0); sc:SetToScale(0.4, 0.4); sc:SetDuration(0.45)
+        g:SetScript("OnFinished", function() s:Hide() end)
+        g:Play()
+    end
+end
+
+-- ─── Mode segments (ticks visibles autour de l'arc) ──────────────────────────
+function CastBar:BuildSegments(data)
+    local cb = data.castbar
+    if not cb or not cb.arcFrame then return end
+    if cb._segs then return end
+    cb._segs = {}
+    local cfg = SUF.db
+    local n = cfg.castbar_v8_count or 12
+    local arcSize = cb.arcFrame:GetWidth() or 188
+    local R = arcSize * 0.5 - 2
+    for i = 1, n do
+        local t = cb.arcFrame:CreateTexture(nil, "OVERLAY", nil, 3)
+        t:SetTexture(SUF.WHITE8x8 or "Interface\\Buttons\\WHITE8X8")
+        t:SetSize(3, 8)
+        t:SetVertexColor(1, 1, 1, 0.85)
+        local angle = (i - 1) / n * 2 * math.pi - math.pi / 2
+        t:SetPoint("CENTER", cb.arcFrame, "CENTER",
+            math.cos(angle) * R, math.sin(angle) * R)
+        local rot = math.deg(angle) - 90
+        t:SetRotation(math.rad(rot))
+        cb._segs[i] = t
+    end
+end
+
+function CastBar:UpdateSegments(data, progress)
+    local cb = data.castbar
+    if not cb or not cb._segs then return end
+    local n = #cb._segs
+    local lit = math.floor(progress * n + 0.5)
+    for i = 1, n do
+        local on = (i <= lit)
+        cb._segs[i]:SetVertexColor(
+            on and cb.color.r or 0.3,
+            on and cb.color.g or 0.3,
+            on and cb.color.b or 0.3,
+            on and 1.0 or 0.4)
     end
 end
 

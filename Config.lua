@@ -115,6 +115,8 @@ SUF.defaults = {
         -- Glow HP critique (orb_lowhp_glow.tga, pulsé)
         orb_lowhp_glow_enabled  = true,
         orb_lowhp_threshold     = 0.25,
+        -- Target ripple : onde quand on perd des HP
+        orb_target_ripple       = true,
         -- Midnight star
         orb_midnight_star       = false,
         orb_midnight_star_alpha = 0.55,

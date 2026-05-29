@@ -390,6 +390,18 @@ function Orb:CreatePlayer()
     data.lowhpGlow  = lowhpGlow
     data._glowTime  = 0
 
+    -- Target ripple : onde lumineuse qui se propage quand on perd de la vie
+    local ripple = hpFxClipFrame:CreateTexture(nil, "OVERLAY", nil, 6)
+    ripple:SetTexture(SNPM("orb_glow"))
+    ripple:SetSize(size, size)
+    ripple:SetPoint("CENTER", fillTex, "TOP", 0, 0)
+    ripple:SetBlendMode("ADD")
+    ripple:SetVertexColor(1, 0.9, 0.4, 1)
+    ripple:AddMaskTexture(mask)
+    ripple:SetAlpha(0)
+    data.ripple        = ripple
+    data._lastHpRatio  = 1.0
+
     -- ── emptyShadeFrame (root+7) — voile zone vide ─────────────────────────
     -- Ancré TOP sur l'orbe, BOTTOM sur fillTex:TOP. Suit géométrie C-side.
     local emptyShadeFrame = CreateFrame("Frame", nil, root)
@@ -614,6 +626,13 @@ function Orb:UpdateFill(data, ratio)
     local cfg = SUF.db
     ratio = ratio or data.displayHP or data.targetHP or 1.0
 
+    -- Détection perte de vie → ripple
+    local last = data._lastHpRatio or 1.0
+    if last - ratio > 0.025 then
+        Orb:SpawnRipple(data)
+    end
+    data._lastHpRatio = ratio
+
     local r, g, b = SUF:ResolveFillColor(cfg, ratio)
 
     -- Court-circuit si la couleur n'a pas changé
@@ -768,6 +787,23 @@ function Orb:AnimTick(data, dt)
     end
 end
 
+-- ─── SpawnRipple : onde lumineuse à la ligne HP quand on perd de la vie ─────
+function Orb:SpawnRipple(data)
+    if not data or not data.ripple then return end
+    local cfg = SUF.db
+    if cfg.orb_target_ripple == false then return end
+    local r = data.ripple
+    r:SetAlpha(0.85)
+    r:SetScale(1.0)
+    local g = r:CreateAnimationGroup()
+    local sc = g:CreateAnimation("Scale")
+    sc:SetFromScale(0.4, 0.4); sc:SetToScale(1.8, 1.8); sc:SetDuration(0.55)
+    local fa = g:CreateAnimation("Alpha")
+    fa:SetFromAlpha(0.85); fa:SetToAlpha(0); fa:SetDuration(0.55)
+    g:SetScript("OnFinished", function() r:SetAlpha(0); r:SetScale(1.0) end)
+    g:Play()
+end
+
 -- ─── SetMapMode ────────────────────────────────────────────────────────────────
 -- mapOn=true : masque les couches HP/effets de fond pour laisser voir la carte,
 -- tout en GARDANT le verre/gloss/ombre/bordure au-dessus (sphère intégrée).
@@ -785,6 +821,7 @@ function Orb:SetMapMode(data, mapOn)
         setA(data.lightStar, 0); setA(data.emptyShadeTex, 0)
         setA(data.waveT1, 0);   setA(data.waveT2, 0)
         setA(data.spark, 0);    setA(data.lowhpGlow, 0)
+        setA(data.ripple, 0)
         if data.hpBar then pcall(data.hpBar.SetAlpha, data.hpBar, 0) end
         if data.hpText    then data.hpText:Hide() end
         if data.hpSubText then data.hpSubText:Hide() end
