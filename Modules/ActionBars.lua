@@ -151,9 +151,12 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
     return btn
 end
 
--- ─── Layout d'une aile par colonnes ───────────────────────────────────────────
--- buttons : table de boutons déjà créés (ordre séquentiel)
--- columns : { 7, 5, 3, 1 }
+-- ─── Layout d'une aile : tessellation ◁▷ jointive, pointe vers l'extérieur ─────
+-- Chaque colonne = une bande verticale de triangles ▷◁ alternés (pas vertical
+-- = demi-base) qui s'emboîtent. Les colonnes avancent d'une pleine largeur de
+-- triangle (bandes adjacentes bord à bord) → grand triangle plein qui pointe
+-- vers l'extérieur, base large côté sphère.
+-- columns : { 7, 5, 3, 1 } (boutons par colonne, décroissant = pointe).
 local function _layoutWing(wing, buttons, columns, btnSize, isLeft)
     if not wing then return end
     local cfg     = SUF.db
@@ -161,23 +164,21 @@ local function _layoutWing(wing, buttons, columns, btnSize, isLeft)
     local gap     = cfg.actionbar_gap or 6
     local orbR    = (wing._orbSize or 160) * 0.5
 
-    -- stepY = pleine hauteur (triangles empilés bord à bord, pas de chevauchement
-    -- vertical → fini la "bouillie"). stepX = pleine largeur entre colonnes.
-    local stepX = btnSize * spacing
-    local stepY = btnSize * spacing
-    local baseX = orbR + gap + btnSize * 0.5
+    local s       = btnSize * spacing       -- largeur de bande / taille triangle
+    local stepY   = s * 0.5                  -- pas vertical = demi-base (emboîtement)
+    local baseL   = orbR + gap               -- bord gauche de la 1re colonne
 
     local idx = 1
     for c = 1, #columns do
         local count = columns[c]
-        local colX  = baseX + (c - 1) * stepX
-        if isLeft then colX = -colX end
+        local xc = baseL + (c - 1) * s + s * 0.5
+        if isLeft then xc = -xc end
         for j = 1, count do
             local btn = buttons[idx]
             if btn then
                 local yOff = ((count - 1) * 0.5 - (j - 1)) * stepY
                 btn:ClearAllPoints()
-                btn:SetPoint("CENTER", wing, "CENTER", colX, yOff)
+                btn:SetPoint("CENTER", wing, "CENTER", xc, yOff)
             end
             idx = idx + 1
         end
@@ -193,13 +194,18 @@ local function _buildWing(name, root, rootFL, size, baseBar, startSlot, columns,
     wing._orbSize = size
 
     local buttons = {}
-    -- Aile horizontale → triangles pointant vers l'EXTÉRIEUR.
-    -- Aile droite : ▷ (tri_left, pointe à droite). Aile gauche : ◁ (tri_right).
-    local triPath = isLeft and TRI_RIGHT or TRI_LEFT
+    -- Tessellation ◁▷ : dans chaque bande, alternance triangle base-gauche /
+    -- base-droite (décalés d'une demi-base) → ils s'emboîtent.
+    -- Aile droite (pointe à droite) : j pair = ▷ (base gauche, tri_left),
+    --   j impair = ◁ (base droite, tri_right). Aile gauche = miroir.
     local idx = 1
     for c = 1, #columns do
         local count = columns[c]
         for j = 1, count do
+            local even = ((j - 1) % 2 == 0)
+            local triPath
+            if isLeft then triPath = even and TRI_RIGHT or TRI_LEFT
+            else            triPath = even and TRI_LEFT  or TRI_RIGHT end
             local slot = _absSlot(baseBar, startSlot, idx)
             local btn  = _createButton(wing, slot, triPath, btnSize, name .. "B" .. idx)
             if btn then buttons[idx] = btn end
