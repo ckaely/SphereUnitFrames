@@ -161,13 +161,13 @@ SUF.defaults = {
 
         -- Minimap
         minimap_enabled          = true,
-        minimap_mode             = "disabled",  -- "disabled" | "adjacent" | "integrated"
-        minimap_hp_threshold     = 90,          -- % HP minimum pour mode exploration
+        minimap_mode             = "integrated", -- "disabled" | "adjacent" | "integrated"
+        minimap_hp_threshold     = 0,           -- 0 = toujours visible hors combat
         minimap_transition_speed = 0.3,
         minimap_hide_buttons     = true,
 
         -- Barres d'action (ailes triangulaires)
-        actionbars_enabled       = false,
+        actionbars_enabled       = true,
         actionbar_left_bar       = 2,
         actionbar_left_start     = 1,
         actionbar_left_count     = 12,

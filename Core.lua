@@ -202,8 +202,10 @@ function UpdateHealth()
     -- Texte HP
     if SUF.Orb then pcall(SUF.Orb.UpdateHPText, SUF.Orb, data) end
 
-    -- Couleur fill progressive : réévaluer si le seuil est traversé
-    if SUF.db and SUF.db.fill_color_mode == "progressive" then
+    -- Couleur fill : réévaluer pour TOUS les modes (class / progressive / fixed).
+    -- Pour "class" à 100% HP le lerp ne déclenche jamais → UpdateFill doit être
+    -- appelé ici explicitement pour que la couleur de classe apparaisse immédiatement.
+    if SUF.Orb then
         pcall(SUF.Orb.UpdateFill, SUF.Orb, data, data.displayHP or ratio)
     end
 end

@@ -30,9 +30,13 @@ SUF.Orb = SUF.Orb or {}
 local Orb = SUF.Orb
 
 -- ─── Constantes ──────────────────────────────────────────────────────────────
-local NATIVE_RING = SUF.NATIVE_RING  or "Interface\\Buttons\\UI-AutoCastableOverlay"
-local RADIAL_GLOW = SUF.RADIAL_GLOW  or "Interface\\Cooldown\\ping4"
-local WHITE8x8    = SUF.WHITE8x8     or "Interface\\Buttons\\WHITE8X8"
+local NATIVE_RING  = SUF.NATIVE_RING  or "Interface\\Buttons\\UI-AutoCastableOverlay"
+local RADIAL_GLOW  = SUF.RADIAL_GLOW  or "Interface\\Cooldown\\ping4"
+local WHITE8x8     = SUF.WHITE8x8     or "Interface\\Buttons\\WHITE8X8"
+-- Masque circulaire natif WoW (cercle blanc solide sur transparent).
+-- Garanti disponible depuis WoW 3.x. Utilisé par les portraits de personnage.
+-- NE PAS utiliser ping4 (radial glow = gradient, produit un carré visible).
+local CIRCLE_MASK  = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 local pi, cos, sin, abs = math.pi, math.cos, math.sin, math.abs
 
 -- ─── CreatePlayer ─────────────────────────────────────────────────────────────
@@ -72,9 +76,11 @@ function Orb:CreatePlayer()
     orb:SetFrameLevel(rootFL + 2)
     data.orb = orb
 
-    -- Masque circulaire appliqué à toutes les textures de l'orbe
+    -- Masque circulaire — TempPortraitAlphaMask = cercle blanc solide natif WoW.
+    -- IMPÉRATIF : ne JAMAIS utiliser ping4 ici — c'est un radial glow, pas un
+    -- disque solide → produit un fond rectangulaire visible (carré noir).
     local mask = orb:CreateMaskTexture()
-    mask:SetTexture(RADIAL_GLOW, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    mask:SetTexture(CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     mask:SetAllPoints(orb)
     data.mask = mask
 
@@ -155,6 +161,11 @@ function Orb:CreatePlayer()
     hpFxClipFrame:SetPoint("BOTTOMLEFT",  orb,     "BOTTOMLEFT",  0,  0)
     hpFxClipFrame:SetPoint("BOTTOMRIGHT", orb,     "BOTTOMRIGHT", 0,  0)
     hpFxClipFrame:SetPoint("TOP",         fillTex, "TOP",         0,  0)
+    -- SetClipsChildren : clip les textures enfants aux limites du frame
+    -- (pattern SNP — évite les débordements visuels sur la zone vide)
+    if hpFxClipFrame.SetClipsChildren then
+        pcall(hpFxClipFrame.SetClipsChildren, hpFxClipFrame, true)
+    end
     data.hpFxClipFrame = hpFxClipFrame
 
     local hpFxClipMask = root:CreateMaskTexture()
@@ -358,15 +369,9 @@ function Orb:SoftUpdate(data)
         data.hpBar:SetStatusBarColor(r, g, b, cfg.orb_hp_fill_alpha or 0.0)
     end
 
-    -- Effets orbe
-    data.bgGalaxy:SetVertexColor(0.3, 0.5, 1.0,
-        (cfg.orb_galaxy_enabled ~= false) and (cfg.orb_galaxy_alpha or 0.15) or 0.0)
-    data.bgShimmer:SetVertexColor(0.6, 0.4, 1.0,
-        (cfg.orb_shimmer_enabled ~= false) and (cfg.orb_shimmer_alpha or 0.22) or 0.0)
-    data.galaxy:SetVertexColor(0.3, 0.5, 1.0,
-        (cfg.orb_galaxy_enabled ~= false) and (cfg.orb_galaxy_alpha or 0.15) or 0.0)
-    data.shimmer:SetVertexColor(0.6, 0.4, 1.0,
-        (cfg.orb_shimmer_enabled ~= false) and (cfg.orb_shimmer_alpha or 0.22) or 0.0)
+    -- Effets orbe : couleur + alpha entièrement gérés par UpdateFill en fin de fonction.
+    -- NE PAS appeler SetAlpha() séparément ici : SetVertexColor(r,g,b,a) dans UpdateFill
+    -- écrase l'alpha indépendamment — un SetAlpha() en amont créerait une double couche.
     data.lightStar:SetShown(cfg.orb_midnight_star == true)
     if cfg.orb_midnight_star then
         data.lightStar:SetVertexColor(1, 1, 1, cfg.orb_midnight_star_alpha or 0.6)
@@ -401,6 +406,12 @@ function Orb:SoftUpdate(data)
     if SUF.Minimap and SUF.Minimap._integrated then
         pcall(SUF.Minimap.UpdateScale, SUF.Minimap)
     end
+
+    -- Appliquer la couleur de fill (classe / progressive / fixed) aux FX de l'orbe.
+    -- Doit être en dernier : les alphas sont déjà positionnés ci-dessus.
+    -- Invalider le cache pour forcer le re-rendu même si la couleur n'a pas changé.
+    data._lastFillR = nil
+    Orb:UpdateFill(data, data.displayHP or 1.0)
 end
 
 -- ─── ApplyBorderStyle ────────────────────────────────────────────────────────
