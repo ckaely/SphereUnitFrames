@@ -301,8 +301,9 @@ function Orb:CreatePlayer()
     local borderTex = borderOverlayFrame:CreateTexture(nil, "ARTWORK")
     borderTex:SetAllPoints(borderOverlayFrame)
     borderTex:SetBlendMode("ADD")
-    borderTex:AddMaskTexture(mask)
-    borderTex:SetAlpha(0)  -- appliqué dans SoftUpdate
+    -- NE PAS AddMaskTexture(mask) ici : la bordure est AUTOUR de l'orbe,
+    -- pas dedans. Masquer = la clipper au cercle = invisible à l'extérieur.
+    borderTex:SetAlpha(0)  -- appliqué dans SoftUpdate / ApplyBorderStyle
     data.borderTex = borderTex
 
     -- ── overlayFrame (root+9) — textes HP ─────────────────────────────────
@@ -423,7 +424,18 @@ function Orb:ApplyBorderStyle(data)
     if not tex then return end
 
     if not info or not info.path then
-        tex:SetAlpha(0)
+        -- Style "solide" : anneau lumineux ADD autour de l'orbe.
+        -- NATIVE_RING = ring shape (pas un disque) → naturellement circulaire.
+        -- Taille > orbSize → visible en dehors du cercle.
+        -- Couleur mise à jour par UpdateFill() pour suivre la couleur de classe.
+        tex:SetTexture(NATIVE_RING)
+        tex:SetBlendMode("ADD")
+        tex:SetVertexColor(cfg.borderR or 1, cfg.borderG or 0.8, cfg.borderB or 0, cfg.borderA or 1)
+        tex:SetAlpha(cfg.borderA or 1)
+        local sz = (cfg.orbSize or 160) * (cfg.border_size_ratio or 1.5)
+        tex:ClearAllPoints()
+        tex:SetSize(sz, sz)
+        tex:SetPoint("CENTER", data.orb, "CENTER", 0, 0)
         return
     end
 
@@ -482,7 +494,17 @@ function Orb:UpdateFill(data, ratio)
 
     -- HP fill visible
     if data.hpBar then
-        data.hpBar:SetStatusBarColor(r, g, b, cfg.orb_hp_fill_alpha or 0.0)
+        data.hpBar:SetStatusBarColor(r, g, b, cfg.orb_hp_fill_alpha or 0.88)
+    end
+
+    -- Bordure "solide" suit la couleur de classe/fill
+    if data.borderTex then
+        local bStyle = cfg.borderStyle or "solide"
+        local bInfo  = SUF.BORDER_STYLES[bStyle]
+        if not bInfo or not bInfo.path then
+            -- Style solide : teinte de la bordure = couleur de classe
+            data.borderTex:SetVertexColor(r, g, b, cfg.borderA or 1.0)
+        end
     end
 end
 

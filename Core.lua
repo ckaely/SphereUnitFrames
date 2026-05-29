@@ -45,6 +45,31 @@ local function Initialize()
         SUF.db = SUFDB
     end
 
+    -- ── Migration v2 ─────────────────────────────────────────────────────────
+    -- One-shot : applique les nouvelles valeurs par défaut aux SUFDB existants
+    -- (AceDB ne met à jour que les clés ABSENTES, pas les valeurs changées).
+    if SUF.db and not SUF.db._migV2 then
+        local db = SUF.db
+        -- Rendre la sphère colorée visible (était 0.0 = invisible)
+        if (db.orb_hp_fill_alpha or 0) < 0.1 then
+            db.orb_hp_fill_alpha = 0.88
+        end
+        -- Afficher les HP absolus ("169k") sous le pourcentage
+        if db.show_hp_absolute == false then
+            db.show_hp_absolute = true
+        end
+        -- Minimap intégrée par défaut (était "disabled")
+        if (db.minimap_mode or "disabled") == "disabled" then
+            db.minimap_mode = "integrated"
+            db.minimap_hp_threshold = 0
+        end
+        -- Barres d'action activées
+        if db.actionbars_enabled == false then
+            db.actionbars_enabled = true
+        end
+        db._migV2 = true
+    end
+
     -- Créer la frame joueur
     if SUF.Orb then
         pcall(SUF.Orb.CreatePlayer, SUF.Orb)

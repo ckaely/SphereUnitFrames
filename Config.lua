@@ -84,8 +84,8 @@ SUF.defaults = {
         orb_gloss_alpha       = 0.20,
         orb_glass_alpha       = 0.15,
 
-        -- HP fill visible (0 = invisible, pilote C-side uniquement)
-        orb_hp_fill_alpha     = 0.0,
+        -- HP fill visible (0.88 = sphère colorée visible)
+        orb_hp_fill_alpha     = 0.88,
 
         -- Zone vide
         orb_empty_clear_enabled = true,
@@ -116,7 +116,7 @@ SUF.defaults = {
 
         -- Textes HP
         show_hp_percent  = true,
-        show_hp_absolute = false,
+        show_hp_absolute = true,
         hp_font          = "Fonts\\FRIZQT__.TTF",
         hp_font_size     = 22,
         hp_font_r        = 1.0, hp_font_g = 1.0, hp_font_b = 1.0,
