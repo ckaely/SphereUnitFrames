@@ -369,6 +369,15 @@ for i, deg in ipairs({270, 198, 342, 126, 54}) do
     RING_ANGLES[i] = deg * _pi / 180
 end
 
+-- ─── Direction → angle centre (radians) ──────────────────────────────────────
+-- Coordonnées WoW : 0° = droite, 90° = haut, 180° = gauche, 270° = bas
+local DIR_ANGLE = {
+    top    = _pi * 0.5,    -- 90°  → haut
+    bottom = _pi * 1.5,    -- 270° → bas
+    left   = _pi,          -- 180° → gauche
+    right  = 0,            -- 0°   → droite
+}
+
 -- ─── Repositionnement ────────────────────────────────────────────────────────
 local function RepositionIcons(data)
     local cfg      = _cfg()
@@ -378,14 +387,12 @@ local function RepositionIcons(data)
     if n == 0 then data._ringAuraCount = 0; return end
 
     local orbRadius = (data.orbSize or 160) * 0.5
-    local R0        = orbRadius + 4 + baseSize * 0.5
-    local offsetR   = (cfg.auras_offset_radius or 1.35) - 1.0  -- extra radius multiplier
 
-    -- ── Mode anneau ──────────────────────────────────────────────────────────
+    -- ── Mode anneau (5 slots fixes) ──────────────────────────────────────────
     if (cfg.auras_mode or "ring") == "ring" then
         local maxSlots = math.min(n, 5)
         for i = 1, maxSlots do
-            local ic  = icons[i]
+            local ic   = icons[i]
             local size = baseSize
             local R    = orbRadius * (cfg.auras_offset_radius or 1.35) + size * 0.5
             local ang  = RING_ANGLES[i]
@@ -400,45 +407,31 @@ local function RepositionIcons(data)
         return
     end
 
-    -- ── Mode arc ─────────────────────────────────────────────────────────────
+    -- ── Mode arc (direction configurable par type) ───────────────────────────
     data._ringAuraCount = 0
-    local maxBuffs   = cfg.auras_max_buffs   or 8
-    local maxDebuffs = cfg.auras_max_debuffs or 8
 
     local groups = {harm={}, help={}}
     for _, ic in ipairs(icons) do
         if ic.auraType == "help" then groups.help[#groups.help+1] = ic
-        else groups.harm[#groups.harm+1] = ic end
+        else                          groups.harm[#groups.harm+1] = ic end
     end
+
+    local maxSpreadDeg = cfg.auras_arc_spread or 160
+    local maxSpreadRad = maxSpreadDeg * _pi / 180
 
     local function placeGroup(list, auraType)
         local count = #list
         if count == 0 then return end
         local R = orbRadius * (cfg.auras_offset_radius or 1.35) + baseSize * 0.5
 
-        -- Debuffs: arc inférieur (270°); Buffs: arc supérieur (90°)
-        local isBuff   = auraType == "help"
-        local center   = isBuff and (_pi * 0.5) or (_pi * 1.5)
-        local spread   = math.min(160, (count - 1) * 32) * _pi / 180
+        -- Lire la direction de l'arc depuis la config
+        local dirKey = (auraType == "help")
+                       and (cfg.auras_buff_arc_dir   or "top")
+                       or  (cfg.auras_debuff_arc_dir or "bottom")
+        local center = DIR_ANGLE[dirKey] or _pi * 1.5
 
-        local arcStart = cfg.auras_arc_start_angle
-        local arcEnd   = cfg.auras_arc_end_angle
-        if arcStart and arcEnd and not isBuff then
-            -- Arc personnalisé (config)
-            local startRad = arcStart * _pi / 180
-            local endRad   = arcEnd   * _pi / 180
-            local arcSpan  = endRad - startRad
-            for i, ic in ipairs(list) do
-                local frac  = (count > 1) and ((i-1) / (count-1)) or 0.5
-                local angle = startRad + frac * arcSpan
-                ic:SetSize(baseSize, baseSize)
-                LayoutAuraIconVisual(ic, baseSize)
-                ic:ClearAllPoints()
-                ic:SetPoint("CENTER", data.orb, "CENTER", R * _cos(angle), R * _sin(angle))
-                ic:Show()
-            end
-            return
-        end
+        -- Spread proportionnel au nombre d'auras, plafonné à maxSpread
+        local spread = math.min(maxSpreadRad, (count - 1) * (32 * _pi / 180))
 
         for i, ic in ipairs(list) do
             local frac  = (count > 1) and ((i-1) / (count-1)) or 0.5

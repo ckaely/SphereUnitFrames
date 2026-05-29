@@ -122,7 +122,15 @@ local function _dropdown(parent, label, options, key, x, y, onChange)
     _font(lbl, 10)
     lbl:SetPoint("LEFT", btn, "LEFT", 6, 0)
     lbl:SetTextColor(1, 0.9, 0.5, 1)
-    if SUF.db and SUF.db[key] then lbl:SetText(tostring(SUF.db[key])) end
+    if SUF.db and SUF.db[key] ~= nil then
+        local displayText = tostring(SUF.db[key])
+        for _, opt in ipairs(options) do
+            if (opt.value or opt) == SUF.db[key] then
+                displayText = tostring(opt.label or opt); break
+            end
+        end
+        lbl:SetText(displayText)
+    end
 
     btn._isOpen = false
     btn._dropdown = nil
@@ -380,18 +388,34 @@ function PSUI:_BuildAurasPage()
     local p = _newPage(self._content)
     self._pages["Auras"] = p
 
+    local arcDirOpts = {
+        {label="Haut",   value="top"},
+        {label="Bas",    value="bottom"},
+        {label="Gauche", value="left"},
+        {label="Droite", value="right"},
+    }
+    local function refreshAuras()
+        local data = SUF.player
+        if data and SUF.Auras then
+            pcall(SUF.Auras.UpdateUnit, SUF.Auras, data, "player", nil)
+        end
+    end
+
     _check(p, "Activer les auras", "auras_enabled", 8, -10)
     _dropdown(p, "Mode", {
         {label="Anneau (ring)", value="ring"},
         {label="Arc",           value="arc"},
-    }, "auras_mode", 8, -36)
-    _slider(p, "Taille des icônes (px)", "auras_size", 16, 48, 1, 8, -76)
-    _slider(p, "Rayon (×orbRadius)", "auras_offset_radius", 1.0, 2.0, 0.05, 8, -118)
+    }, "auras_mode", 8, -36, refreshAuras)
+    _slider(p, "Taille des icônes (px)", "auras_size", 16, 48, 1, 8, -76, refreshAuras)
+    _slider(p, "Rayon (×orbRadius)", "auras_offset_radius", 1.0, 2.0, 0.05, 8, -118, refreshAuras)
     _slider(p, "Max debuffs", "auras_max_debuffs", 1, 16, 1, 8, -160)
     _slider(p, "Max buffs",   "auras_max_buffs",   1, 16, 1, 8, -202)
-    _check(p, "Timers", "auras_show_timers", 8, -240)
-    _check(p, "Seulement mes debuffs", "auras_debuff_mine_only", 8, -262)
-    _check(p, "Seulement mes buffs",   "auras_buff_mine_only",   8, -284)
+    _dropdown(p, "Arc — position buffs",   arcDirOpts, "auras_buff_arc_dir",   8, -238, refreshAuras)
+    _dropdown(p, "Arc — position debuffs", arcDirOpts, "auras_debuff_arc_dir", 8, -274, refreshAuras)
+    _slider(p, "Arc — spread (°)", "auras_arc_spread", 20, 340, 10, 8, -314, refreshAuras)
+    _check(p, "Timers",                "auras_show_timers",      8, -354)
+    _check(p, "Seulement mes debuffs", "auras_debuff_mine_only", 8, -376)
+    _check(p, "Seulement mes buffs",   "auras_buff_mine_only",   8, -398)
 end
 
 -- ─── Page Minimap ─────────────────────────────────────────────────────────────

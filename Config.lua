@@ -150,8 +150,10 @@ SUF.defaults = {
         auras_buff_mine_only    = false,
         auras_debuff_mine_only  = false,
         auras_show_timers    = true,
-        auras_arc_start_angle= 200,
-        auras_arc_end_angle  = 340,
+        -- Direction des arcs : "top" | "bottom" | "left" | "right"
+        auras_buff_arc_dir   = "top",
+        auras_debuff_arc_dir = "bottom",
+        auras_arc_spread     = 160,  -- degrés de spread max (tous arcs)
 
         -- Power / ressource secondaire
         power_enabled        = true,
