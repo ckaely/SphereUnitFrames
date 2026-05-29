@@ -37,6 +37,16 @@ local WHITE8x8     = SUF.WHITE8x8     or "Interface\\Buttons\\WHITE8X8"
 -- Garanti disponible depuis WoW 3.x. Utilisé par les portraits de personnage.
 -- NE PAS utiliser ping4 (radial glow = gradient, produit un carré visible).
 local CIRCLE_MASK  = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+
+-- ─── Assets SNP ──────────────────────────────────────────────────────────────
+-- Textures sphère depuis SphereNameplates/media/ (si SNP installé).
+-- SUF.SNP_MEDIA est défini dans Config.lua comme chemin absolu.
+-- Si SNP absent : la texture est nil → WoW ignore silencieusement → fond transparent.
+-- NE PAS utiliser NATIVE_RING (UI-AutoCastableOverlay) ni RADIAL_GLOW (ping4)
+-- pour des effets visuels : ce sont des textures WoW génériques non sphériques.
+local function SNPM(n)
+    return (SUF.SNP_MEDIA or "Interface\\AddOns\\SphereNameplates\\media\\") .. n
+end
 local pi, cos, sin, abs = math.pi, math.cos, math.sin, math.abs
 
 -- ─── CreatePlayer ─────────────────────────────────────────────────────────────
@@ -107,21 +117,23 @@ function Orb:CreatePlayer()
     bgEffectsFrame:SetFrameLevel(rootFL + 1)
     data.bgEffectsFrame = bgEffectsFrame
 
+    -- galaxy.tga : nébuleuse rotatoire (texture SNP, taille légèrement oversized)
     local bgGalaxy = bgEffectsFrame:CreateTexture(nil, "ARTWORK")
-    bgGalaxy:SetTexture(NATIVE_RING)
-    bgGalaxy:SetAllPoints(bgEffectsFrame)
+    bgGalaxy:SetTexture(SNPM("galaxy"))
+    bgGalaxy:SetSize(size * 1.4, size * 1.4)
+    bgGalaxy:SetPoint("CENTER", orb, "CENTER", 0, 0)
     bgGalaxy:SetBlendMode("ADD")
-    bgGalaxy:SetVertexColor(0.3, 0.5, 1.0, cfg.orb_galaxy_alpha or 0.15)
+    bgGalaxy:SetVertexColor(1, 1, 1, (cfg.orb_galaxy_alpha or 0.15) * 0.36)
     bgGalaxy:AddMaskTexture(mask)
     data.bgGalaxy = bgGalaxy
 
+    -- orb1.tga : reflet doux (texture SNP, rotation)
     local bgShimmer = bgEffectsFrame:CreateTexture(nil, "ARTWORK")
-    bgShimmer:SetTexture(NATIVE_RING)
+    bgShimmer:SetTexture(SNPM("orb1"))
     bgShimmer:SetAllPoints(bgEffectsFrame)
     bgShimmer:SetBlendMode("ADD")
-    bgShimmer:SetVertexColor(0.6, 0.4, 1.0, cfg.orb_shimmer_alpha or 0.22)
+    bgShimmer:SetVertexColor(1, 1, 1, (cfg.orb_shimmer_alpha or 0.22) * 0.32)
     bgShimmer:AddMaskTexture(mask)
-    bgShimmer:SetTexCoord(0, 1, 0, 1)
     data.bgShimmer = bgShimmer
 
     -- ── minimapHolder (root+2) — conteneur pour MinimapCluster ────────────
@@ -176,27 +188,28 @@ function Orb:CreatePlayer()
     hpFxClipMask:SetAllPoints(hpFxClipFrame)
     data.hpFxClipMask = hpFxClipMask
 
-    -- Galaxy foreground (suit HP)
+    -- Galaxy foreground (suit HP via hpFxClipFrame + hpEffectMask)
+    -- galaxy.tga : nébuleuse rotatoire, teinturé à la couleur de classe par UpdateFill
     local galaxy = hpFxClipFrame:CreateTexture(nil, "ARTWORK")
-    galaxy:SetAllPoints(orb)
-    galaxy:SetTexture(NATIVE_RING)
+    galaxy:SetTexture(SNPM("galaxy"))
+    galaxy:SetSize(size * 1.4, size * 1.4)
+    galaxy:SetPoint("CENTER", orb, "CENTER", 0, 0)
     galaxy:SetBlendMode("ADD")
-    galaxy:SetVertexColor(0.3, 0.5, 1.0, cfg.orb_galaxy_alpha or 0.15)
+    galaxy:SetVertexColor(1, 1, 1, cfg.orb_galaxy_alpha or 0.15)
     galaxy:AddMaskTexture(hpEffectMask)
     galaxy:AddMaskTexture(hpFxClipMask)
     galaxy:AddMaskTexture(mask)
     data.galaxy = galaxy
 
-    -- Shimmer foreground
+    -- Shimmer foreground : orb2.tga (contre-rotation), teinturé couleur classe
     local shimmer = hpFxClipFrame:CreateTexture(nil, "ARTWORK")
+    shimmer:SetTexture(SNPM("orb2"))
     shimmer:SetAllPoints(orb)
-    shimmer:SetTexture(NATIVE_RING)
     shimmer:SetBlendMode("ADD")
-    shimmer:SetVertexColor(0.6, 0.4, 1.0, cfg.orb_shimmer_alpha or 0.22)
+    shimmer:SetVertexColor(1, 1, 1, cfg.orb_shimmer_alpha or 0.22)
     shimmer:AddMaskTexture(hpEffectMask)
     shimmer:AddMaskTexture(hpFxClipMask)
     shimmer:AddMaskTexture(mask)
-    shimmer:SetTexCoord(0.25, 1.25, 0.25, 1.25)
     data.shimmer = shimmer
 
     -- Light Star
@@ -223,50 +236,50 @@ function Orb:CreatePlayer()
     overlayOrbFrame:SetFrameLevel(rootFL + 4)
     data.overlayOrbFrame = overlayOrbFrame
 
-    -- Shadow (BLEND — assombrit, pas de hpEffectMask → contraste zone vide)
+    -- Shadow : orb_innershadow.tga (ombre sur les bords → effet 3D creux)
+    -- BLEND = assombrit sans colorer. Pas de hpEffectMask → couvre toute la sphère.
     local shadowTex = overlayOrbFrame:CreateTexture(nil, "ARTWORK")
-    shadowTex:SetTexture(RADIAL_GLOW)
+    shadowTex:SetTexture(SNPM("orb_innershadow"))
     shadowTex:SetAllPoints(overlayOrbFrame)
-    shadowTex:SetBlendMode("BLEND")
-    shadowTex:SetVertexColor(0, 0, 0, cfg.orb_shadow_alpha or 0.35)
+    shadowTex:SetAlpha(cfg.orb_shadow_alpha or 0.35)
     shadowTex:AddMaskTexture(mask)
     data.shadowTex = shadowTex
 
-    -- Specular highlight (ADD, pas de hpEffectMask — point de lumière en haut-gauche)
+    -- Specular : point de lumière haut-gauche (ADD). orb_gloss.tga = reflet sphère.
+    -- Pas de hpEffectMask : le point de lumière reste visible même à vide.
     local specular = overlayOrbFrame:CreateTexture(nil, "OVERLAY")
-    specular:SetSize(size * 0.55, size * 0.55)
-    specular:SetPoint("TOPLEFT", overlayOrbFrame, "TOPLEFT", size * 0.05, -size * 0.05)
-    specular:SetTexture(RADIAL_GLOW)
+    specular:SetSize(size * 0.6, size * 0.6)
+    specular:SetPoint("TOPLEFT", overlayOrbFrame, "TOPLEFT", size * 0.04, -size * 0.04)
+    specular:SetTexture(SNPM("orb_gloss"))
     specular:SetBlendMode("ADD")
-    specular:SetVertexColor(1.0, 1.0, 1.0, 0.12)
+    specular:SetVertexColor(1.0, 1.0, 1.0, 0.18)
     specular:AddMaskTexture(mask)
     data.specular = specular
 
-    -- Glass 1 (ADD + hpEffectMask → limité zone remplie)
+    -- Glass 1 : orb3.tga (reflet de verre ADD — limité zone remplie via hpEffectMask)
     local glassTex = overlayOrbFrame:CreateTexture(nil, "OVERLAY")
     glassTex:SetAllPoints(overlayOrbFrame)
-    glassTex:SetTexture(NATIVE_RING)
+    glassTex:SetTexture(SNPM("orb3"))
     glassTex:SetBlendMode("ADD")
     glassTex:SetVertexColor(1.0, 1.0, 1.0, cfg.orb_glass_alpha or 0.15)
     glassTex:AddMaskTexture(hpEffectMask)
     glassTex:AddMaskTexture(mask)
     data.glassTex = glassTex
 
-    -- Glass 2 (ADD + hpEffectMask)
+    -- Glass 2 : orb4.tga (second reflet, légèrement translucide)
     local glassTex2 = overlayOrbFrame:CreateTexture(nil, "OVERLAY")
     glassTex2:SetAllPoints(overlayOrbFrame)
-    glassTex2:SetTexture(NATIVE_RING)
+    glassTex2:SetTexture(SNPM("orb4"))
     glassTex2:SetBlendMode("ADD")
-    glassTex2:SetVertexColor(0.8, 0.9, 1.0, (cfg.orb_glass_alpha or 0.15) * 0.6)
+    glassTex2:SetVertexColor(1.0, 1.0, 1.0, (cfg.orb_glass_alpha or 0.15) * 0.5)
     glassTex2:AddMaskTexture(hpEffectMask)
     glassTex2:AddMaskTexture(mask)
-    glassTex2:SetTexCoord(1, 0, 0, 1)
     data.glassTex2 = glassTex2
 
-    -- Gloss (ADD + hpEffectMask)
+    -- Gloss : orb_gloss.tga plein cercle (ADD, zone remplie seulement)
     local glossTex = overlayOrbFrame:CreateTexture(nil, "OVERLAY")
     glossTex:SetAllPoints(overlayOrbFrame)
-    glossTex:SetTexture(RADIAL_GLOW)
+    glossTex:SetTexture(SNPM("orb_gloss"))
     glossTex:SetBlendMode("ADD")
     glossTex:SetVertexColor(1.0, 1.0, 1.0, cfg.orb_gloss_alpha or 0.20)
     glossTex:AddMaskTexture(hpEffectMask)
@@ -358,13 +371,14 @@ function Orb:SoftUpdate(data)
     -- Fond
     data.bgTex:SetVertexColor(0.03, 0.03, 0.05, cfg.bgAlpha or 0.75)
 
-    -- Shadow
-    data.shadowTex:SetVertexColor(0, 0, 0, cfg.orb_shadow_alpha or 0.35)
+    -- Shadow : orb_innershadow.tga — SetAlpha() préserve les couleurs de la texture.
+    -- Ne PAS utiliser SetVertexColor(0,0,0) qui écraserait le shadow baked-in.
+    data.shadowTex:SetAlpha(cfg.orb_shadow_alpha or 0.35)
 
-    -- Glass / gloss
+    -- Glass / gloss : vertex color (1,1,1) = neutre, laisse les textures SNP jouer.
     local ga = cfg.orb_glass_alpha or 0.15
     data.glassTex:SetVertexColor(1.0, 1.0, 1.0, ga)
-    data.glassTex2:SetVertexColor(0.8, 0.9, 1.0, ga * 0.6)
+    data.glassTex2:SetVertexColor(1.0, 1.0, 1.0, ga * 0.5)
     data.glossTex:SetVertexColor(1.0, 1.0, 1.0, cfg.orb_gloss_alpha or 0.20)
 
     -- HP fill alpha
@@ -430,11 +444,10 @@ function Orb:ApplyBorderStyle(data)
     if not tex then return end
 
     if not info or not info.path then
-        -- Style "solide" : anneau lumineux ADD autour de l'orbe.
-        -- NATIVE_RING = ring shape (pas un disque) → naturellement circulaire.
-        -- Taille > orbSize → visible en dehors du cercle.
+        -- Style "solide" : orb-border.tga (anneau circulaire SNP) autour de l'orbe.
+        -- Taille légèrement > orbSize → visible en anneau autour du cercle.
         -- Couleur mise à jour par UpdateFill() pour suivre la couleur de classe.
-        tex:SetTexture(NATIVE_RING)
+        tex:SetTexture(SNPM("orb-border"))
         tex:SetBlendMode("ADD")
         tex:SetVertexColor(cfg.borderR or 1, cfg.borderG or 0.8, cfg.borderB or 0, cfg.borderA or 1)
         tex:SetAlpha(cfg.borderA or 1)
