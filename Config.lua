@@ -318,6 +318,27 @@ function SUF:ResolveFillColor(cfg, ratio)
     end
 end
 
+-- ─── ClampPos ────────────────────────────────────────────────────────────────
+-- Clamp posX/posY pour que la root frame reste entièrement sur l'écran.
+-- Coordonnées pour SetPoint("BOTTOM", UIParent, "BOTTOM", posX, posY) :
+--   posX = offset horizontal depuis le centre de UIParent (peut être négatif)
+--   posY = distance du bas de la frame depuis le bas de UIParent (≥ 0)
+-- Doit correspondre aux dimensions calculées dans Orb.lua:CreatePlayer.
+function SUF:ClampPos(x, y)
+    if not UIParent then return x, y end
+    local sw    = UIParent:GetWidth()  or 1024
+    local sh    = UIParent:GetHeight() or 768
+    local sz    = (SUF.db and SUF.db.orbSize) or 160
+    local rootW = sz * 3.0        -- cohérent avec Orb.lua rootW = size * 3.0
+    local rootH = sz * 2.8        -- cohérent avec Orb.lua rootH = size * 2.8
+    local halfW = rootW * 0.5 + 10
+    -- posX : frame doit rester horizontalement dans l'écran
+    x = math.max(-(sw * 0.5 - halfW), math.min(sw * 0.5 - halfW, x))
+    -- posY : bas de la frame dans [10 .. sh - rootH - 10]
+    y = math.max(10, math.min(sh - rootH - 10, y))
+    return x, y
+end
+
 -- ─── GetHPTextColor ──────────────────────────────────────────────────────────
 -- Couleur du texte HP selon ratio (pour les textes de l'orbe).
 function SUF:GetHPTextColor(cfg, ratio)

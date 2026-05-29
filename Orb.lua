@@ -51,7 +51,10 @@ function Orb:CreatePlayer()
     local root = CreateFrame("Frame", "SUFRoot", UIParent)
     root:SetFrameStrata("MEDIUM")
     root:SetSize(rootW, rootH)
-    root:SetPoint("BOTTOM", UIParent, "BOTTOM", cfg.posX or 0, cfg.posY or 200)
+    do  -- clamp pour éviter une position hors-écran dès la création
+        local px, py = SUF:ClampPos(cfg.posX or 0, cfg.posY or 200)
+        root:SetPoint("BOTTOM", UIParent, "BOTTOM", px, py)
+    end
     root:SetMovable(true)
     root:EnableMouse(false)   -- désactivé par défaut; Interaction.lua l'active
     root:SetIgnoreParentAlpha(true)
@@ -399,9 +402,12 @@ function Orb:SoftUpdate(data)
         data.hpSubText:SetShown(cfg.show_hp_absolute == true)
     end
 
-    -- Position
+    -- Position (clamp : évite qu'une valeur db erronée sorte la frame de l'écran)
     data.root:ClearAllPoints()
-    data.root:SetPoint("BOTTOM", UIParent, "BOTTOM", cfg.posX or 0, cfg.posY or 200)
+    do
+        local px, py = SUF:ClampPos(cfg.posX or 0, cfg.posY or 200)
+        data.root:SetPoint("BOTTOM", UIParent, "BOTTOM", px, py)
+    end
 
     -- Minimap scale update
     if SUF.Minimap and SUF.Minimap._integrated then

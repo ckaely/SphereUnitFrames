@@ -17,6 +17,7 @@ function Interaction:Init(data)
     if not root then return end
 
     root:SetMovable(true)
+    root:SetClampedToScreen(true)   -- empêche le drag de sortir de l'écran
     root:EnableMouse(true)
     root:RegisterForDrag("LeftButton")
 
@@ -31,17 +32,23 @@ function Interaction:Init(data)
 
     root:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        -- Sauvegarder position relative à UIParent centre
         if not SUF.db then return end
-        local x, y = self:GetCenter()
-        if not x then return end
-        local s   = UIParent:GetEffectiveScale() or 1
-        local ux  = UIParent:GetLeft() or 0
-        local uy  = UIParent:GetBottom() or 0
-        local uw  = UIParent:GetWidth()  or 1024
-        local uh  = UIParent:GetHeight() or 768
-        SUF.db.posX = x - (ux + uw * 0.5)
-        SUF.db.posY = y - (uy + uh * 0.5)
+        -- Coordonnées pour SetPoint("BOTTOM", UIParent, "BOTTOM", posX, posY) :
+        --   posX = offset depuis le centre horizontal de UIParent
+        --   posY = bas de la frame depuis le bas de UIParent
+        -- On utilise GetLeft/GetBottom (coordonnées absolues post-drag)
+        -- et NON GetCenter−(screenCenter), qui donnait un Y relatif au centre écran
+        -- (incorrect pour l'ancre BOTTOM → frame sautait au prochain RefreshAll).
+        local left  = self:GetLeft()
+        local bot   = self:GetBottom()
+        if not left then return end
+        local uw    = UIParent:GetWidth() or 1024
+        local rootW = self:GetWidth() or 0
+        local x = (left + rootW * 0.5) - uw * 0.5
+        local y = math.max(0, bot)
+        if SUF.ClampPos then x, y = SUF:ClampPos(x, y) end
+        SUF.db.posX = x
+        SUF.db.posY = y
     end)
 
     root:SetScript("OnMouseUp", function(self, btn)
