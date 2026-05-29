@@ -190,15 +190,32 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
 
     -- Icône d'action : centrée sur le CENTROÏDE du triangle (pas la boîte)
     local cx, cy = _centroidOffset(triPath, btnSize)
-    local iconTex = btn.icon or btn.Icon
-    if iconTex then
-        iconTex:ClearAllPoints()
-        iconTex:SetPoint("CENTER", btn, "CENTER", cx, cy)
-        iconTex:SetSize(btnSize * 0.66, btnSize * 0.66)
-        iconTex:SetTexCoord(0.10, 0.90, 0.10, 0.90)
-        iconTex:SetDrawLayer("ARTWORK", 2)
-        pcall(iconTex.AddMaskTexture, iconTex, mask)
+    btn._centroidX = cx
+    btn._centroidY = cy
+    btn._btnSize   = btnSize
+
+    -- ── IMPORTANT : on neutralise l'icône native du template (qui réécrit
+    -- ses propres anchors/size à chaque update) et on dessine LA NÔTRE par-dessus.
+    local nativeIcon = btn.icon or btn.Icon
+    if nativeIcon then
+        pcall(function() nativeIcon:SetAlpha(0); nativeIcon:Hide() end)
     end
+
+    local myIcon = btn:CreateTexture(nil, "ARTWORK", nil, 4)
+    myIcon:SetPoint("CENTER", btn, "CENTER", cx, cy)
+    myIcon:SetSize(btnSize * 0.66, btnSize * 0.66)
+    myIcon:SetTexCoord(0.10, 0.90, 0.10, 0.90)
+    pcall(myIcon.AddMaskTexture, myIcon, mask)
+    btn._myIcon = myIcon
+
+    -- ── Flash de cast triangulaire (custom, REMPLACE l'animation Blizzard) ───
+    local castFlash = btn:CreateTexture(nil, "OVERLAY", nil, 6)
+    castFlash:SetTexture(triPath)
+    castFlash:SetAllPoints(btn)
+    castFlash:SetBlendMode("ADD")
+    castFlash:SetVertexColor(1, 0.95, 0.6, 1)
+    castFlash:SetAlpha(0)
+    btn._castFlash = castFlash
 
     -- ── Masquer TOUTES les sous-textures natives carrées ─────────────────
     -- ActionBarButtonTemplate insère beaucoup d'éléments (Border, SlotArt,
@@ -387,19 +404,28 @@ end
 -- GetActionTexture / GetActionCooldown sur events.
 local function _updateButton(btn)
     if not btn or not btn._actionSlot then return end
-    local slot   = btn._actionSlot
-    local iconTex = btn.icon or btn.Icon
+    local slot    = btn._actionSlot
+    -- L'icône native du template est neutralisée → on garde la nôtre.
+    if btn.icon and btn.icon.SetAlpha then pcall(btn.icon.SetAlpha, btn.icon, 0) end
+    if btn.Icon and btn.Icon.SetAlpha then pcall(btn.Icon.SetAlpha, btn.Icon, 0) end
+    local iconTex = btn._myIcon
     local tex
     local ok = pcall(function() tex = GetActionTexture(slot) end)
     if iconTex then
         if ok and tex then
             iconTex:SetTexture(tex)
             iconTex:SetAlpha(1)
+            -- Force le ré-anchorage triangulaire (au cas où qqch ait changé)
+            iconTex:ClearAllPoints()
+            iconTex:SetPoint("CENTER", btn, "CENTER", btn._centroidX or 0, btn._centroidY or 0)
+            iconTex:SetSize((btn._btnSize or 40) * 0.66, (btn._btnSize or 40) * 0.66)
+            iconTex:SetTexCoord(0.10, 0.90, 0.10, 0.90)
+            if btn._triMask then pcall(iconTex.AddMaskTexture, iconTex, btn._triMask) end
             if btn._fillTex then btn._fillTex:SetAlpha(0.35) end
         else
             iconTex:SetTexture(nil)
             iconTex:SetAlpha(0)
-            if btn._fillTex then btn._fillTex:SetAlpha(1) end  -- triangle plein si slot vide
+            if btn._fillTex then btn._fillTex:SetAlpha(1) end
         end
     end
     -- Count (charges / consommables)
@@ -457,6 +483,38 @@ function ActionBars:UpdateAll()
     if self._rightButtons then for _, b in ipairs(self._rightButtons) do _updateButton(b) end end
 end
 
+-- ─── Cast flash triangulaire (remplace l'animation Blizzard) ─────────────────
+local function _playCastFlash(btn)
+    if not btn or not btn._castFlash then return end
+    local f = btn._castFlash
+    f:SetAlpha(0.95)
+    f:SetScale(1.0)
+    local g = f:CreateAnimationGroup()
+    local sc = g:CreateAnimation("Scale")
+    sc:SetFromScale(1.0, 1.0); sc:SetToScale(1.4, 1.4); sc:SetDuration(0.32)
+    local fa = g:CreateAnimation("Alpha")
+    fa:SetFromAlpha(0.95); fa:SetToAlpha(0); fa:SetDuration(0.32)
+    g:SetScript("OnFinished", function() f:SetAlpha(0); f:SetScale(1.0) end)
+    g:Play()
+end
+
+function ActionBars:_FlashSpell(spellID)
+    if not spellID then return end
+    local function checkBtn(b)
+        if not b or not b._actionSlot then return end
+        local ok, atype, id = pcall(GetActionInfo, b._actionSlot)
+        if ok and atype == "spell" and id == spellID then
+            _playCastFlash(b)
+        elseif ok and atype == "macro" then
+            -- Pour les macros, on flash si le sort correspond au sort principal
+            local okM, macroSpellID = pcall(GetMacroSpell, id or 0)
+            if okM and macroSpellID == spellID then _playCastFlash(b) end
+        end
+    end
+    if self._leftButtons  then for _, b in ipairs(self._leftButtons)  do checkBtn(b) end end
+    if self._rightButtons then for _, b in ipairs(self._rightButtons) do checkBtn(b) end end
+end
+
 -- Frame d'events (créé une fois)
 function ActionBars:_ensureEvents()
     if self._evt then return end
@@ -474,9 +532,13 @@ function ActionBars:_ensureEvents()
     e:RegisterEvent("SPELL_ACTIVATION_OVERLAY_SHOW")
     e:RegisterEvent("SPELL_ACTIVATION_OVERLAY_HIDE")
     e:RegisterEvent("PLAYER_REGEN_ENABLED")
-    e:SetScript("OnEvent", function(_, ev, arg1)
-        if ev == "ACTIONBAR_SLOT_CHANGED" then
-            -- maj ciblée si possible
+    -- Flash de cast triangulaire sur succès
+    e:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+    e:SetScript("OnEvent", function(_, ev, arg1, _, arg3)
+        if ev == "UNIT_SPELLCAST_SUCCEEDED" then
+            -- arg1=unit, arg2=castGUID, arg3=spellID
+            if SUF.ActionBars then SUF.ActionBars:_FlashSpell(arg3) end
+        elseif ev == "ACTIONBAR_SLOT_CHANGED" then
             if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
         else
             if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
