@@ -183,6 +183,81 @@ local function _dropdown(parent, label, options, key, x, y, onChange)
     return btn
 end
 
+-- Color picker popup (Blizzard ColorPickerFrame, API moderne + fallback legacy)
+-- Usage : _colorButton(parent, "Label", "key_r", "key_g", "key_b", x, y, onChange)
+local function _colorButton(parent, label, keyR, keyG, keyB, x, y, onChange)
+    _label(parent, label, x, y)
+    local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    btn:SetSize(140, 22)
+    btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 16)
+    pcall(function()
+        btn:SetBackdrop({bgFile=WHITE, edgeFile=WHITE, edgeSize=1})
+        btn:SetBackdropColor(0.06, 0.06, 0.10, 0.95)
+        btn:SetBackdropBorderColor(0.45, 0.45, 0.55, 1)
+    end)
+    local swatch = btn:CreateTexture(nil, "OVERLAY")
+    swatch:SetSize(18, 16)
+    swatch:SetPoint("LEFT", btn, "LEFT", 6, 0)
+    local function refresh()
+        local r = (SUF.db and SUF.db[keyR]) or 1
+        local g = (SUF.db and SUF.db[keyG]) or 1
+        local b = (SUF.db and SUF.db[keyB]) or 1
+        swatch:SetColorTexture(r, g, b, 1)
+    end
+    local labelFS = btn:CreateFontString(nil, "OVERLAY")
+    _font(labelFS, 10)
+    labelFS:SetPoint("LEFT", swatch, "RIGHT", 6, 0)
+    labelFS:SetTextColor(1, 0.95, 0.7, 1)
+    labelFS:SetText("Choisir la couleur")
+    refresh()
+
+    btn:SetScript("OnClick", function()
+        if not ColorPickerFrame or not SUF.db then return end
+        local r0 = SUF.db[keyR] or 1
+        local g0 = SUF.db[keyG] or 1
+        local b0 = SUF.db[keyB] or 1
+        local function apply()
+            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+            SUF.db[keyR] = nr; SUF.db[keyG] = ng; SUF.db[keyB] = nb
+            refresh()
+            if onChange then onChange(nr, ng, nb)
+            elseif SUF.RefreshAll then pcall(SUF.RefreshAll, SUF) end
+        end
+        local function cancel(prev)
+            local pr, pg, pb = r0, g0, b0
+            if prev then
+                pr = prev.r or prev[1] or pr
+                pg = prev.g or prev[2] or pg
+                pb = prev.b or prev[3] or pb
+            end
+            SUF.db[keyR] = pr; SUF.db[keyG] = pg; SUF.db[keyB] = pb
+            refresh()
+            if onChange then onChange(pr, pg, pb)
+            elseif SUF.RefreshAll then pcall(SUF.RefreshAll, SUF) end
+        end
+        pcall(ColorPickerFrame.Hide, ColorPickerFrame)
+        if ColorPickerFrame.SetupColorPickerAndShow then
+            ColorPickerFrame:SetupColorPickerAndShow({
+                r = r0, g = g0, b = b0,
+                swatchFunc  = apply,
+                opacityFunc = apply,
+                cancelFunc  = cancel,
+                hasOpacity  = false,
+                previousValues = {r=r0, g=g0, b=b0, [1]=r0, [2]=g0, [3]=b0},
+            })
+        else
+            ColorPickerFrame.previousValues = {r=r0, g=g0, b=b0, [1]=r0, [2]=g0, [3]=b0}
+            pcall(ColorPickerFrame.SetColorRGB, ColorPickerFrame, r0, g0, b0)
+            ColorPickerFrame.func = apply
+            ColorPickerFrame.opacityFunc = apply
+            ColorPickerFrame.cancelFunc = cancel
+            ColorPickerFrame:Show()
+        end
+    end)
+    btn.Refresh = refresh
+    return btn
+end
+
 -- Champ texte (ex: colonnes "7,5,3,1")
 local function _editbox(parent, label, key, x, y, onChange)
     _label(parent, label, x, y)
@@ -221,10 +296,9 @@ local function _buildMain()
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop",  f.StopMovingOrSizing)
-    -- Dock à droite (plus jamais "au-dessus" du jeu)
-    f:SetPoint("RIGHT", UIParent, "RIGHT", -20, 0)
+    -- Dock à GAUCHE (jamais au-dessus du jeu)
     f:ClearAllPoints()
-    f:SetPoint("RIGHT", UIParent, "RIGHT", -20, 0)
+    f:SetPoint("LEFT", UIParent, "LEFT", 20, 0)
     pcall(function()
         f:SetBackdrop({
             bgFile   = WHITE,
@@ -400,11 +474,9 @@ function PSUI:_BuildColorsPage()
     _slider(p, "Opacité FX (galaxy/wave)", "fill_alpha", 0.0, 1.0, 0.01, 160, -52)
 
     _divider(p, -90)
-    _label(p, "Couleur fixe (R / G / B)", 8, -96, 11)
-    _slider(p, "R", "fill_r", 0.0, 1.0, 0.01, 8,  -110)
-    _slider(p, "G", "fill_g", 0.0, 1.0, 0.01, 160, -110)
-    _slider(p, "B", "fill_b", 0.0, 1.0, 0.01, 8, -152)
-    _slider(p, "Alpha HP fill", "orb_hp_fill_alpha", 0.0, 1.0, 0.01, 160, -152)
+    _label(p, "Couleur fixe", 8, -96, 11)
+    _colorButton(p, "Sphère (mode fixe)", "fill_r", "fill_g", "fill_b", 8, -112)
+    _slider(p, "Alpha HP fill", "orb_hp_fill_alpha", 0.0, 1.0, 0.01, 160, -112)
 
     _divider(p, -190)
     _label(p, "Bordure décorative", 8, -196, 11)
@@ -543,6 +615,9 @@ function PSUI:_BuildActionBarsPage()
         if v then rebuild() end
     end)
     _check(p, "Afficher les cadres", "actionbar_show_frames", 8, -32, rebuild)
+    _check(p, "Effet glass (verre)",       "actionbar_glass_effect", 160, -32, rebuild)
+    _check(p, "Glow hover (couleur sort)", "actionbar_hover_glow",    8,   -54)
+    _check(p, "Ombre derrière (depth)",    "actionbar_shadow_depth",  160, -54, rebuild)
 
     _divider(p, -56)
     _label(p, "Chaque triangle = 1 bouton. Colonnes = boutons.", 8, -62, 10)
@@ -690,14 +765,12 @@ function PSUI:_BuildXPPage()
     _slider(p, "Hauteur segments",  "xpbar_seg_height",   3,    16,   1,   8, -148, refresh)
 
     _divider(p, -186)
-    _label(p, "Couleur violette (R / G / B)", 8, -192, 11)
-    _slider(p, "R", "xpbar_lit_r", 0.0, 1.0, 0.01, 8,  -206, refresh)
-    _slider(p, "G", "xpbar_lit_g", 0.0, 1.0, 0.01, 8,  -248, refresh)
-    _slider(p, "B", "xpbar_lit_b", 0.0, 1.0, 0.01, 8,  -290, refresh)
+    _label(p, "Couleur de la barre", 8, -192, 11)
+    _colorButton(p, "Couleur",       "xpbar_lit_r", "xpbar_lit_g", "xpbar_lit_b", 8, -210, refresh)
 
-    _divider(p, -328)
-    _slider(p, "Opacité ombre",   "xpbar_shadow_alpha",  0.0, 1.0, 0.05, 8, -340, refresh)
-    _slider(p, "Opacité contour", "xpbar_outline_alpha", 0.0, 1.0, 0.05, 8, -382, refresh)
+    _divider(p, -246)
+    _slider(p, "Opacité ombre",   "xpbar_shadow_alpha",  0.0, 1.0, 0.05, 8, -256, refresh)
+    _slider(p, "Opacité contour", "xpbar_outline_alpha", 0.0, 1.0, 0.05, 8, -298, refresh)
 end
 
 -- ─── Page Modules ─────────────────────────────────────────────────────────────

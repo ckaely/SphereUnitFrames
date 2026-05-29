@@ -251,23 +251,65 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
     end)
     btn._triMask = mask
 
+    -- ── Layering (bas vers haut) ─────────────────────────────────────────
+    -- 1. shadow (BG sublevel -3)  : ombre portée derrière, légèrement décalée
+    -- 2. frame  (BG sublevel  0)  : cadre triangle (contour)
+    -- 3. fill   (BG sublevel  1)  : fond intérieur (couleur dominante)
+    -- 4. icon   (ARTWORK sub 3)   : icône du sort
+    -- 5. glass  (OVERLAY sub 4)   : reflet verre par-dessus
+    -- 6. hover  (OVERLAY sub 6)   : glow au survol
+    -- 7. flash  (OVERLAY sub 7)   : (cast progress géré via fill tint)
+
+    -- ── Shadow : ombre triangulaire derrière (profondeur) ──────────────────
+    if cfg and cfg.actionbar_shadow_depth ~= false then
+        local shadow = btn:CreateTexture(nil, "BACKGROUND", nil, -3)
+        shadow:SetTexture(triPath)
+        shadow:SetSize(btnSize * 1.10, btnSize * 1.10)
+        shadow:SetPoint("CENTER", btn, "CENTER", 1.5, -2)
+        shadow:SetVertexColor(0, 0, 0, 0.65)
+        shadow:SetBlendMode("BLEND")
+        btn._shadowTex = shadow
+    end
+
     -- Cadre triangulaire : SOMBRE TRANSPARENT par défaut (subtil), pas jaune.
-    -- Le jaune est réservé au flash de cast (quand on lance le sort).
     if cfg and cfg.actionbar_show_frames ~= false then
-        local frame = btn:CreateTexture(nil, "BACKGROUND")
+        local frame = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
         frame:SetTexture(triPath)
         frame:SetPoint("CENTER", btn, "CENTER", 0, 0)
         frame:SetSize(btnSize, btnSize)
         frame:SetVertexColor(0.18, 0.18, 0.22, (cfg.actionbar_frame_alpha or 0.55))
         btn._frameTex = frame
 
-        -- Fond sombre transparent interne
-        local fill = btn:CreateTexture(nil, "BORDER")
+        -- Fond intérieur : tinté plus tard avec la couleur dominante du sort
+        local fill = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
         fill:SetTexture(triPath)
         fill:SetPoint("CENTER", btn, "CENTER", 0, 0)
         fill:SetSize(btnSize * 0.92, btnSize * 0.92)
         fill:SetVertexColor(0.03, 0.03, 0.05, 0.55)
         btn._fillTex = fill
+    end
+
+    -- ── Glass effect : reflet verre sur le triangle (au-dessus de l'icône) ─
+    do
+        local glass = btn:CreateTexture(nil, "OVERLAY", nil, 4)
+        glass:SetTexture(SNPM("orb_gloss"))
+        glass:SetAllPoints(btn)
+        glass:SetBlendMode("ADD")
+        glass:SetVertexColor(1, 1, 1, (cfg and cfg.actionbar_glass_alpha) or 0.22)
+        pcall(glass.AddMaskTexture, glass, mask)
+        glass:SetShown(cfg and cfg.actionbar_glass_effect ~= false)
+        btn._glassTex = glass
+    end
+
+    -- ── Hover glow : halo couleur dominante du sort au passage souris ──────
+    do
+        local hg = btn:CreateTexture(nil, "OVERLAY", nil, 6)
+        hg:SetTexture(SNPM("orb_glow"))
+        hg:SetSize(btnSize * 1.55, btnSize * 1.55)
+        hg:SetPoint("CENTER", btn, "CENTER", 0, 0)
+        hg:SetBlendMode("ADD")
+        hg:SetAlpha(0)
+        btn._hoverGlow = hg
     end
 
     -- Icône d'action : on UTILISE celle du template (qui pilote l'affichage
@@ -355,6 +397,21 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
 
     -- ── Cooldown triangulaire (edge runner) ─────────────────────────────
     _attachTriCooldown(btn, triPath, btnSize)
+
+    -- ── Hover : fade in/out du glow avec la couleur dominante ─────────────
+    btn:HookScript("OnEnter", function(self)
+        if SUF.db and SUF.db.actionbar_hover_glow ~= false
+           and self._hoverGlow and self._dominantColor then
+            local c = self._dominantColor
+            self._hoverGlow:SetVertexColor(c[1], c[2], c[3], 1)
+            UIFrameFadeIn(self._hoverGlow, 0.10, 0, 0.85)
+        end
+    end)
+    btn:HookScript("OnLeave", function(self)
+        if self._hoverGlow then
+            UIFrameFadeOut(self._hoverGlow, 0.20, self._hoverGlow:GetAlpha(), 0)
+        end
+    end)
 
     -- ── Drag & drop (placer/déplacer un sort sur le bouton) ──────────────
     btn:SetScript("OnDragStart", function(self)
@@ -540,18 +597,26 @@ local function _updateButton(btn)
             iconTex:SetSize((btn._btnSize or 40) * 0.72, (btn._btnSize or 40) * 0.72)
             iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             if btn._triMask then pcall(iconTex.AddMaskTexture, iconTex, btn._triMask) end
+            -- Stocke la couleur dominante du sort (pour fill + hover glow)
+            local color = _guessSpellColor(tex)
+            btn._dominantColor = color
             -- Fade intérieur couleur dominante : camoufle les coins du triangle
-            -- (en l'absence de cast en cours).
             if btn._fillTex and not btn._castTint then
-                local r, g, b = unpack(_guessSpellColor(tex))
-                btn._fillTex:SetVertexColor(r * 0.50, g * 0.50, b * 0.50, 0.62)
+                btn._fillTex:SetVertexColor(color[1] * 0.50, color[2] * 0.50, color[3] * 0.50, 0.62)
+            end
+            -- Glass effect : toggle live
+            if btn._glassTex then
+                btn._glassTex:SetShown(SUF.db and SUF.db.actionbar_glass_effect ~= false)
+                btn._glassTex:SetVertexColor(1, 1, 1, (SUF.db and SUF.db.actionbar_glass_alpha) or 0.22)
             end
         else
             iconTex:SetTexture(nil)
             iconTex:SetAlpha(0)
+            btn._dominantColor = nil
             if btn._fillTex and not btn._castTint then
                 btn._fillTex:SetVertexColor(0.03, 0.03, 0.05, 0.55)
             end
+            if btn._glassTex then btn._glassTex:Hide() end
         end
     end
     -- Count (charges / consommables)

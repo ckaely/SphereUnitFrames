@@ -241,6 +241,10 @@ SUF.defaults = {
         actionbar_gap            = 6,           -- marge entre orbe et 1re colonne
         actionbar_show_frames    = true,        -- dessiner les cadres (bordures)
         actionbar_frame_alpha    = 0.55,        -- subtil par défaut (sombre transparent)
+        actionbar_glass_effect   = true,        -- reflet verre sur chaque triangle
+        actionbar_glass_alpha    = 0.22,
+        actionbar_hover_glow     = true,        -- glow couleur dominante au survol
+        actionbar_shadow_depth   = true,        -- ombre derrière chaque triangle (profondeur)
         actionbar_glow_procs     = true,
         actionbar_range_check    = true,
         -- Cacher l'UI Blizzard remplacée par SUF
