@@ -59,6 +59,88 @@ local function _absSlot(baseBar, startSlot, seqIndex)
 end
 
 -- ─── Création d'un bouton triangulaire ────────────────────────────────────────
+-- ─── TriCooldown : spark qui parcourt le périmètre du triangle ────────────────
+local function _attachTriCooldown(btn, triPath, btnSize)
+    local cfg = SUF.db
+    local sz  = btnSize * (cfg.actionbar_cd_runner_size or 0.32)
+    local spark = btn:CreateTexture(nil, "OVERLAY", nil, 7)
+    spark:SetTexture("Interface\\Cooldown\\ping4")
+    spark:SetBlendMode("ADD")
+    spark:SetSize(sz, sz)
+    spark:SetVertexColor(
+        cfg.actionbar_cd_runner_r or 1,
+        cfg.actionbar_cd_runner_g or 0.85,
+        cfg.actionbar_cd_runner_b or 0.30, 1)
+    spark:Hide()
+    btn._cdSpark = spark
+
+    local half = btnSize * 0.5
+    local v1x, v1y, v2x, v2y, v3x, v3y
+    if triPath == TRI_LEFT then        -- ▷ (pointe à droite)
+        v1x, v1y = -half,  half
+        v2x, v2y = -half, -half
+        v3x, v3y =  half,  0
+    else                                -- ◁ (pointe à gauche)
+        v1x, v1y =  half,  half
+        v2x, v2y =  half, -half
+        v3x, v3y = -half,  0
+    end
+    local function dist(ax, ay, bx, by)
+        local dx, dy = bx - ax, by - ay
+        return math.sqrt(dx * dx + dy * dy)
+    end
+    local L1 = dist(v1x, v1y, v3x, v3y)   -- v1→v3 (diag haute vers apex)
+    local L2 = dist(v3x, v3y, v2x, v2y)   -- v3→v2 (diag basse depuis apex)
+    local L3 = dist(v2x, v2y, v1x, v1y)   -- v2→v1 (vertical retour)
+    local P  = L1 + L2 + L3
+
+    btn._cdTick = 0
+    btn:HookScript("OnUpdate", function(self, elapsed)
+        if not SUF.db or SUF.db.actionbar_cd_runner == false then
+            if spark:IsShown() then spark:Hide() end
+            return
+        end
+        self._cdTick = (self._cdTick or 0) + elapsed
+        if self._cdTick < 0.05 then return end
+        self._cdTick = 0
+        if not self._actionSlot then return end
+        local ok, start, dur, enable = pcall(GetActionCooldown, self._actionSlot)
+        if not ok or not (start and dur and dur > 0.5) or (enable == 0) then
+            if spark:IsShown() then spark:Hide() end
+            return
+        end
+        local now = GetTime()
+        local t = (now - start) / dur
+        if t >= 1 or t < 0 then spark:Hide(); return end
+        local d = t * P
+        local x, y
+        if d < L1 then
+            local f = d / L1
+            x = v1x + (v3x - v1x) * f; y = v1y + (v3y - v1y) * f
+        elseif d < L1 + L2 then
+            local f = (d - L1) / L2
+            x = v3x + (v2x - v3x) * f; y = v3y + (v2y - v3y) * f
+        else
+            local f = (d - L1 - L2) / L3
+            x = v2x + (v1x - v2x) * f; y = v2y + (v1y - v2y) * f
+        end
+        spark:ClearAllPoints()
+        spark:SetPoint("CENTER", self, "CENTER", x, y)
+        spark:Show()
+    end)
+end
+
+-- Décalage du centroïde du triangle par rapport au centre de la boîte.
+-- ▷ (TRI_LEFT) : centroïde à (btnSize/3, btnSize/2) → décalage X = -btnSize/6
+-- ◁ (TRI_RIGHT): centroïde à (2btnSize/3, btnSize/2) → décalage X = +btnSize/6
+local function _centroidOffset(triPath, btnSize)
+    if triPath == TRI_LEFT  then return -btnSize / 6, 0 end
+    if triPath == TRI_RIGHT then return  btnSize / 6, 0 end
+    if triPath == TRI_UP    then return 0, -btnSize / 6 end
+    if triPath == TRI_DOWN  then return 0,  btnSize / 6 end
+    return 0, 0
+end
+
 local _btnCount = 0
 local function _createButton(parent, actionSlot, triPath, btnSize, name)
     if InCombatLockdown() then return nil end
@@ -66,14 +148,19 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
     local btnName = name or ("SUFActionBtn" .. _btnCount)
     local cfg = SUF.db
 
+    -- ActionBarButtonTemplate = template canonique retail : secure + icon driver
+    -- + cooldown + glow + range. On masque toutes les sous-textures carrées.
     local btn = CreateFrame("CheckButton", btnName, parent,
-        "SecureActionButtonTemplate, ActionButtonTemplate")
+        "SecureActionButtonTemplate, ActionBarButtonTemplate")
     btn:SetSize(btnSize, btnSize)
     btn:SetAttribute("type",   "action")
     btn:SetAttribute("action", actionSlot)
     btn:SetAttribute("checkselfcast",  true)
     btn:SetAttribute("checkfocuscast", true)
+    btn:RegisterForClicks("AnyUp", "AnyDown")
+    btn:RegisterForDrag("LeftButton")
     btn._actionSlot = actionSlot
+    btn._triPath    = triPath
 
     -- Masque triangulaire appliqué à l'icône
     local mask = btn:CreateMaskTexture()
@@ -101,52 +188,95 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
         btn._fillTex = fill
     end
 
-    -- Icône d'action : masquée triangle, insérée à l'intérieur du cadre
+    -- Icône d'action : centrée sur le CENTROÏDE du triangle (pas la boîte)
+    local cx, cy = _centroidOffset(triPath, btnSize)
     local iconTex = btn.icon or btn.Icon
     if iconTex then
         iconTex:ClearAllPoints()
-        iconTex:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        iconTex:SetSize(btnSize * 0.80, btnSize * 0.80)
-        iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        iconTex:SetPoint("CENTER", btn, "CENTER", cx, cy)
+        iconTex:SetSize(btnSize * 0.66, btnSize * 0.66)
+        iconTex:SetTexCoord(0.10, 0.90, 0.10, 0.90)
+        iconTex:SetDrawLayer("ARTWORK", 2)
         pcall(iconTex.AddMaskTexture, iconTex, mask)
     end
 
-    -- Masquer la bordure carrée native de l'ActionButtonTemplate
-    local nrm = btn.GetNormalTexture and btn:GetNormalTexture()
-    if nrm then nrm:SetAlpha(0) end
-    if btn.SetNormalTexture then pcall(btn.SetNormalTexture, btn, "") end
-    -- Highlight / pushed : teinter sans casser la forme
-    if btn.GetHighlightTexture and btn:GetHighlightTexture() then
+    -- ── Masquer TOUTES les sous-textures natives carrées ─────────────────
+    -- ActionBarButtonTemplate insère beaucoup d'éléments (Border, SlotArt,
+    -- NewActionTexture, IconMask circulaire Blizzard…) qui cassent le rendu.
+    local kill = {
+        "NormalTexture", "PushedTexture", "CheckedTexture", "HighlightTexture",
+        "Border", "Flash", "FlyoutArrow", "FlyoutBorder", "FlyoutBorderShadow",
+        "SlotArt", "SlotBackground", "NewActionTexture", "SpellHighlightTexture",
+        "IconMask", "SlotHighlightTexture",
+    }
+    for _, name in ipairs(kill) do
+        local t = btn[name]
+        if t then pcall(function() t:SetAlpha(0); t:Hide() end) end
+    end
+    -- Variantes Get* (méthodes)
+    for _, m in ipairs({"GetNormalTexture","GetPushedTexture","GetCheckedTexture","GetHighlightTexture"}) do
         pcall(function()
-            local h = btn:GetHighlightTexture()
-            h:SetAllPoints(btn)
-            pcall(h.AddMaskTexture, h, mask)
+            local t = btn[m] and btn[m](btn)
+            if t then t:SetAlpha(0) end
         end)
     end
-    if btn.GetPushedTexture and btn:GetPushedTexture() then
-        pcall(function()
-            local pT = btn:GetPushedTexture()
-            pT:SetAllPoints(btn)
-            pcall(pT.AddMaskTexture, pT, mask)
-        end)
-    end
+    pcall(btn.SetNormalTexture, btn, "")
+    pcall(btn.SetPushedTexture, btn, "")
+    pcall(btn.SetHighlightTexture, btn, "")
+
+    -- Highlight personnalisé (triangle teinté)
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetTexture(triPath)
+    hl:SetAllPoints(btn)
+    hl:SetBlendMode("ADD")
+    hl:SetVertexColor(1, 1, 1, 0.18)
+    btn._highlight = hl
 
     -- Cooldown : masquer en triangle si possible
     if btn.cooldown then
-        pcall(function() btn.cooldown:SetAllPoints(btn) end)
+        pcall(function()
+            btn.cooldown:SetAllPoints(btn)
+            btn.cooldown:SetSwipeTexture("Interface\\Cooldown\\ping4")
+            if btn.cooldown.SetUseCircularEdge then btn.cooldown:SetUseCircularEdge(true) end
+            if btn.cooldown.SetDrawBling     then btn.cooldown:SetDrawBling(false) end
+            btn.cooldown:SetSwipeColor(0, 0, 0, 0.65)
+            pcall(btn.cooldown.AddMaskTexture, btn.cooldown, mask)
+        end)
     end
 
-    -- Keybind
+    -- Keybind (positionné au sommet de la zone triangulaire visible)
     if btn.HotKey then
-        btn.HotKey:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
-        btn.HotKey:SetTextColor(1, 1, 1, 0.85)
+        local kbR = cfg.actionbar_keybind_r or 1
+        local kbG = cfg.actionbar_keybind_g or 1
+        local kbB = cfg.actionbar_keybind_b or 0.8
+        local kbA = cfg.actionbar_keybind_alpha or 0.95
+        local kbSize = cfg.actionbar_keybind_size or 9
+        btn.HotKey:SetFont("Fonts\\FRIZQT__.TTF", kbSize, "OUTLINE")
+        btn.HotKey:SetTextColor(kbR, kbG, kbB, kbA)
         btn.HotKey:ClearAllPoints()
-        btn.HotKey:SetPoint("TOP", btn, "TOP", 0, up and -2 or -8)
+        btn.HotKey:SetPoint("TOP", btn, "TOP", cx, -2)
+        btn.HotKey:SetShown(cfg.actionbar_show_keybinds ~= false)
     end
     if btn.Count then
         btn.Count:ClearAllPoints()
-        btn.Count:SetPoint("BOTTOM", btn, "BOTTOM", 0, up and 6 or 2)
+        btn.Count:SetPoint("BOTTOM", btn, "BOTTOM", cx, 3)
     end
+
+    -- ── Cooldown triangulaire (edge runner) ─────────────────────────────
+    _attachTriCooldown(btn, triPath, btnSize)
+
+    -- ── Drag & drop (placer/déplacer un sort sur le bouton) ──────────────
+    btn:SetScript("OnDragStart", function(self)
+        if InCombatLockdown() then return end
+        PickupAction(self._actionSlot)
+        if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
+    end)
+    btn:SetScript("OnReceiveDrag", function(self)
+        if InCombatLockdown() then return end
+        PlaceAction(self._actionSlot)
+        if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
+    end)
+    -- En complément, OnClick déjà géré par le secure framework.
 
     return btn
 end
@@ -291,6 +421,35 @@ local function _updateButton(btn)
             end
         end)
     end
+    -- Range check + tint
+    if iconTex and SUF.db and SUF.db.actionbar_range_check ~= false then
+        local _, inRange = pcall(IsActionInRange, slot)
+        if inRange == false then
+            iconTex:SetVertexColor(1, 0.35, 0.35, 1)   -- rouge = hors portée
+            return
+        end
+    end
+    -- Usable check
+    if iconTex then
+        local ok, usable, nomana = pcall(IsUsableAction, slot)
+        if ok and usable then
+            iconTex:SetVertexColor(1, 1, 1, 1)
+        elseif ok and nomana then
+            iconTex:SetVertexColor(0.5, 0.5, 1.0, 1)   -- bleu = mana insuffisant
+        else
+            iconTex:SetVertexColor(0.4, 0.4, 0.4, 1)   -- gris = inutilisable
+        end
+    end
+    -- Proc glow (overlay natif Blizzard)
+    if SUF.db and SUF.db.actionbar_glow_procs ~= false and ActionButton_ShowOverlayGlow then
+        local hasProc = false
+        pcall(function()
+            local id = btn.action and select(2, GetActionInfo(slot))
+            if id and IsSpellOverlayed then hasProc = IsSpellOverlayed(id) end
+        end)
+        if hasProc then pcall(ActionButton_ShowOverlayGlow, btn)
+        elseif ActionButton_HideOverlayGlow then pcall(ActionButton_HideOverlayGlow, btn) end
+    end
 end
 
 function ActionBars:UpdateAll()
@@ -305,8 +464,15 @@ function ActionBars:_ensureEvents()
     e:RegisterEvent("PLAYER_ENTERING_WORLD")
     e:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
     e:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+    e:RegisterEvent("ACTIONBAR_UPDATE_USABLE")
+    e:RegisterEvent("ACTIONBAR_UPDATE_STATE")
     e:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+    e:RegisterEvent("ACTIONBAR_UPDATE_RANGE")
     e:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+    e:RegisterEvent("SPELL_UPDATE_USABLE")
+    e:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+    e:RegisterEvent("SPELL_ACTIVATION_OVERLAY_SHOW")
+    e:RegisterEvent("SPELL_ACTIVATION_OVERLAY_HIDE")
     e:RegisterEvent("PLAYER_REGEN_ENABLED")
     e:SetScript("OnEvent", function(_, ev, arg1)
         if ev == "ACTIONBAR_SLOT_CHANGED" then

@@ -36,17 +36,19 @@ SUF.WHITE8x8     = "Interface\\Buttons\\WHITE8X8"
 -- ─── Styles de bordure ───────────────────────────────────────────────────────
 -- Partagés visuellement avec SNP si les assets sont présents.
 -- SUF.GetBorderStyleInfo() vérifie l'existence avant usage.
+-- Cadres premium (sprites locaux SUF — plus aucune dépendance à SNP installé)
 SUF.BORDER_STYLES = {
-    solide       = { name="Solide",      path=nil },
-    wow_horde    = { name="Horde",       path=SUF.SNP_MEDIA.."wow_style.png",              blend="BLEND", tint=false, uv={0,       0.3333, 0,   0.5} },
-    wow_alliance = { name="Alliance",    path=SUF.SNP_MEDIA.."wow_style.png",              blend="BLEND", tint=false, uv={0.3333,  0.6667, 0,   0.5} },
-    wow_evil     = { name="Evil",        path=SUF.SNP_MEDIA.."wow_style.png",              blend="BLEND", tint=false, uv={0.6667,  1,      0,   0.5} },
-    wow_beast    = { name="Beast",       path=SUF.SNP_MEDIA.."wow_style.png",              blend="BLEND", tint=false, uv={0,       0.3333, 0.5, 1  } },
-    wow_stone    = { name="Simple Stone",path=SUF.SNP_MEDIA.."wow_style.png",              blend="BLEND", tint=false, uv={0.3333,  0.6667, 0.5, 1  } },
-    wow_gold     = { name="Simple Gold", path=SUF.SNP_MEDIA.."wow_style.png",              blend="BLEND", tint=false, uv={0.6667,  1,      0.5, 1  } },
-    ns_horde     = { name="Horde Fer",   path=SUF.SNP_MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0,       0.3333, 0,   0.5} },
-    ns_alliance  = { name="Alliance Or", path=SUF.SNP_MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0.3333,  0.6667, 0,   0.5} },
-    ns_gold_ring = { name="Anneau Or",   path=SUF.SNP_MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0.6667,  1,      0.5, 1  } },
+    solide       = { name="Solide",       path=nil },
+    classique    = { name="Classique",    path=SUF.MEDIA.."orb-border" },
+    shadowcircle = { name="Shadow Circle",path=SUF.MEDIA.."shadowcircle" },
+    detail       = { name="Détail",       path=SUF.MEDIA.."orb-border-2" },
+    -- Sprites cadre_sphere_new_style.png : grille 3×2
+    ns_horde     = { name="Horde Fer",    path=SUF.MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0,      0.3333, 0,   0.5} },
+    ns_alliance  = { name="Alliance Or",  path=SUF.MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0.3333, 0.6667, 0,   0.5} },
+    ns_void      = { name="Vide",         path=SUF.MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0.6667, 1,      0,   0.5} },
+    ns_beast     = { name="Bête",         path=SUF.MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0,      0.3333, 0.5, 1  } },
+    ns_obsidian  = { name="Obsidienne",   path=SUF.MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0.3333, 0.6667, 0.5, 1  } },
+    ns_gold_ring = { name="Anneau Or",    path=SUF.MEDIA.."cadre_sphere_new_style.png", blend="BLEND", tint=false, uv={0.6667, 1,      0.5, 1  } },
 }
 
 function SUF:GetBorderStyleInfo(style)
@@ -143,18 +145,50 @@ SUF.defaults = {
         fill_prog_low_r  = 1.0,  fill_prog_low_g  = 0.4,  fill_prog_low_b  = 0.0,
         fill_prog_crit_r = 0.9,  fill_prog_crit_g = 0.1,  fill_prog_crit_b = 0.1,
 
-        -- CastBar
+        -- CastBar (port étendu SNP — modes, FX, presets)
         castbar_enabled      = true,
-        castbar_style        = "circular",  -- "circular" | "segments" | "classic"
-        castbar_v8_segments  = false,
-        castbar_v8_count     = 16,
+        castbar_style        = "circular",  -- "classic"|"circular"|"collapse_glow"
+        castbar_preset       = "minimal",   -- "minimal"|"overwatch"|"techno"
+        castbar_color_by_class = true,
         castbar_show_icon    = true,
         castbar_show_time    = true,
+        castbar_show_name    = true,
+        castbar_show_track   = true,        -- anneau de fond
+        castbar_show_ticks   = false,
+        castbar_show_pin12   = false,
+        castbar_complete_flash = true,      -- flash vert à 100%
+        castbar_show_kick_fx   = true,      -- shards rouges + texte interrupt
+        castbar_interrupt_mark_enabled = true,
+        castbar_interrupt_mark_duration = 0.42,
+        castbar_interrupt_mark_size = 18,
+        castbar_glow_intensity = 1.0,
+        castbar_arc_thickness  = 14,
+        castbar_scale        = 1.0,
+        castbar_offset_x     = 0,
+        castbar_offset_y     = 0,
+        castbar_v8_segments  = false,
+        castbar_v8_count     = 16,
         castbar_time_font_size = 12,
         castbar_time_offset_y  = -10,
+        castbar_name_font_size = 11,
+        castbar_text_position  = "bottom",   -- "bottom"|"top"|"center"
+        castbar_icon_position  = "topleft",  -- "topleft"|"topright"|"top"|"center"
+        castbar_icon_size      = 28,
+        castbar_focus_mode     = false,      -- masque HP/textes durant cast
+        -- Collapse Glow Ring : grand anneau qui rétrécit jusqu'à l'arc
+        castbar_collapse_start_scale = 1.75,
+        castbar_collapse_end_scale   = 0.72,
+        castbar_collapse_alpha       = 0.85,
+        castbar_collapse_glow_pulse  = true,
+        -- Couleurs par état (R/G/B)
         castbar_color_cast_r   = 1.0, castbar_color_cast_g   = 0.7, castbar_color_cast_b   = 0.0,
-        castbar_color_channel_r= 0.3, castbar_color_channel_g= 0.7, castbar_color_channel_b= 1.0,
-        castbar_color_immune_r = 0.6, castbar_color_immune_g = 0.6, castbar_color_immune_b = 0.6,
+        castbar_color_channel_r= 0.1, castbar_color_channel_g= 0.55,castbar_color_channel_b= 0.95,
+        castbar_color_immune_r = 0.88,castbar_color_immune_g = 0.10,castbar_color_immune_b = 0.08,
+        castbar_color_nonint_r = 0.72,castbar_color_nonint_g = 0.18,castbar_color_nonint_b = 1.0,
+        castbar_color_finish_r = 0.30,castbar_color_finish_g = 1.0, castbar_color_finish_b = 0.30,
+        castbar_color_broken_r = 0.95,castbar_color_broken_g = 0.20,castbar_color_broken_b = 0.20,
+        castbar_color_track_r  = 0.10,castbar_color_track_g  = 0.10,castbar_color_track_b  = 0.12,
+        castbar_color_track_a  = 0.55,
 
         -- Auras
         auras_enabled        = true,
@@ -207,6 +241,19 @@ SUF.defaults = {
         actionbar_frame_alpha    = 0.95,
         actionbar_glow_procs     = true,
         actionbar_range_check    = true,
+        -- Cooldown triangulaire premium (edge runner)
+        actionbar_cd_runner      = true,
+        actionbar_cd_runner_size = 0.32,   -- ratio btnSize
+        actionbar_cd_runner_r    = 1.0,
+        actionbar_cd_runner_g    = 0.85,
+        actionbar_cd_runner_b    = 0.30,
+        -- Raccourcis clavier
+        actionbar_show_keybinds  = true,
+        actionbar_keybind_size   = 9,
+        actionbar_keybind_r      = 1.0,
+        actionbar_keybind_g      = 1.0,
+        actionbar_keybind_b      = 0.8,
+        actionbar_keybind_alpha  = 0.95,
 
         -- Modules ON/OFF (isolation FPS)
         modules_orbanim_enabled  = true,
@@ -214,6 +261,16 @@ SUF.defaults = {
         modules_auras_enabled    = true,
         modules_hplerp_enabled   = true,
         modules_power_enabled    = true,
+
+        -- Horloge intégrée
+        clock_enabled      = true,
+        clock_format       = "24h",         -- "24h" | "12h"
+        clock_show_server  = false,
+        clock_show_fps     = true,
+        clock_show_ms      = true,
+        clock_position     = "orb_top",     -- "orb_top" | "orb_bottom" | "screen_corner"
+        clock_alpha        = 0.95,
+        clock_font_size    = 14,
 
         -- Logs
         logs_enabled      = false,

@@ -62,6 +62,20 @@ local function AddRotation(tex, degrees, duration, startDelay)
     return ok and ag or nil
 end
 
+local function AddAlphaPulse(tex, lo, hi, dur)
+    local ok, ag = pcall(function()
+        local g  = tex:CreateAnimationGroup()
+        local a1 = g:CreateAnimation("Alpha")
+        a1:SetFromAlpha(lo); a1:SetToAlpha(hi); a1:SetDuration(dur); a1:SetOrder(1)
+        local a2 = g:CreateAnimation("Alpha")
+        a2:SetFromAlpha(hi); a2:SetToAlpha(lo); a2:SetDuration(dur); a2:SetOrder(2)
+        g:SetLooping("REPEAT")
+        g:Play()
+        return g
+    end)
+    return ok and ag or nil
+end
+
 -- ─── CreatePlayer ─────────────────────────────────────────────────────────────
 -- Crée la frame sphère joueur unique. Appelée depuis Core:Initialize().
 function Orb:CreatePlayer()
@@ -148,6 +162,38 @@ function Orb:CreatePlayer()
     bgShimmer:SetVertexColor(1, 1, 1, (cfg.orb_shimmer_alpha or 0.22) * 0.32)
     bgShimmer:AddMaskTexture(mask)
     data.bgShimmer = bgShimmer
+
+    -- Couches galaxy supplémentaires (galaxy2/3 contra-rotation, profondeur SNP)
+    local bgGalaxy2 = bgEffectsFrame:CreateTexture(nil, "ARTWORK", nil, 1)
+    bgGalaxy2:SetTexture(SNPM("galaxy2"))
+    bgGalaxy2:SetSize(size * 1.55, size * 1.55)
+    bgGalaxy2:SetPoint("CENTER", orb, "CENTER", 0, 0)
+    bgGalaxy2:SetBlendMode("ADD")
+    bgGalaxy2:SetVertexColor(0.85, 0.9, 1, (cfg.orb_galaxy_alpha or 0.15) * 0.28)
+    bgGalaxy2:AddMaskTexture(mask)
+    AddRotation(bgGalaxy2, -360, 65)
+    data.bgGalaxy2 = bgGalaxy2
+
+    local bgGalaxy3 = bgEffectsFrame:CreateTexture(nil, "ARTWORK", nil, 2)
+    bgGalaxy3:SetTexture(SNPM("galaxy3"))
+    bgGalaxy3:SetSize(size * 1.3, size * 1.3)
+    bgGalaxy3:SetPoint("CENTER", orb, "CENTER", 0, 0)
+    bgGalaxy3:SetBlendMode("ADD")
+    bgGalaxy3:SetVertexColor(1, 0.95, 0.85, (cfg.orb_galaxy_alpha or 0.15) * 0.23)
+    bgGalaxy3:AddMaskTexture(mask)
+    AddRotation(bgGalaxy3, 360, 80, 5)
+    data.bgGalaxy3 = bgGalaxy3
+
+    -- Shimmer 2 (contra-rotation + pulse)
+    local bgShimmer2 = bgEffectsFrame:CreateTexture(nil, "ARTWORK", nil, 3)
+    bgShimmer2:SetTexture(SNPM("orb2"))
+    bgShimmer2:SetAllPoints(bgEffectsFrame)
+    bgShimmer2:SetBlendMode("ADD")
+    bgShimmer2:SetVertexColor(1, 1, 1, (cfg.orb_shimmer_alpha or 0.22) * 0.20)
+    bgShimmer2:AddMaskTexture(mask)
+    AddRotation(bgShimmer2, -360, 38)
+    AddAlphaPulse(bgShimmer2, (cfg.orb_shimmer_alpha or 0.22) * 0.12, (cfg.orb_shimmer_alpha or 0.22) * 0.28, 4.5)
+    data.bgShimmer2 = bgShimmer2
 
     -- ── minimapHolder (root+2) — conteneur pour MinimapCluster ────────────
     local minimapHolder = CreateFrame("Frame", "SUFMinimapHolder", root)
@@ -698,6 +744,13 @@ function Orb:AnimTick(data, dt)
         local angle = now * 0.08
         data.bgGalaxy:SetRotation(angle)
         data.galaxy:SetRotation(angle)
+    end
+
+    -- Border glow pulse (alpha modulé sur la bordure si activé)
+    if data.borderTex and cfg.border_glow_pulse and cfg.borderEnabled ~= false then
+        local base = cfg.borderA or 1
+        local p = 0.65 + 0.35 * (0.5 + 0.5 * sin(now * 1.6))
+        data.borderTex:SetAlpha(base * p)
     end
 
     -- Low-HP glow : halo rouge pulsé sous le seuil

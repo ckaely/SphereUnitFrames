@@ -23,5 +23,6 @@ Modules/Power.lua
 Modules/MinimapIntegration.lua
 Modules/ActionBars.lua
 Modules/Interaction.lua
+Modules/Clock.lua
 Core.lua
 Modules/PSUI.lua

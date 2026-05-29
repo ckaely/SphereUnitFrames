@@ -85,6 +85,7 @@ local function Initialize()
     end
     if SUF.ActionBars then pcall(SUF.ActionBars.Init, SUF.ActionBars) end
     if SUF.Minimap    then pcall(SUF.Minimap.Init,    SUF.Minimap) end
+    if SUF.Clock      then pcall(SUF.Clock.Init,      SUF.Clock) end
     if SUF.Profiler   then pcall(SUF.Profiler.RestorePanelState, SUF.Profiler) end
 
     -- Events joueur (RegisterUnitEvent = plus précis qu'events globaux)

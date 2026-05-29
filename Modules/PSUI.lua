@@ -221,7 +221,10 @@ local function _buildMain()
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop",  f.StopMovingOrSizing)
-    f:SetPoint("CENTER", UIParent, "CENTER", 250, 0)
+    -- Dock à droite (plus jamais "au-dessus" du jeu)
+    f:SetPoint("RIGHT", UIParent, "RIGHT", -20, 0)
+    f:ClearAllPoints()
+    f:SetPoint("RIGHT", UIParent, "RIGHT", -20, 0)
     pcall(function()
         f:SetBackdrop({
             bgFile   = WHITE,
@@ -269,13 +272,13 @@ local function _buildMain()
 
     -- ── Créer les onglets ────────────────────────────────────────────────────
     local tabDefs = {
-        "Sphère", "Couleurs", "Castbar", "Auras", "Barres", "Minimap", "Modules"
+        "Sphère", "Couleurs", "Castbar", "Auras", "Barres", "Minimap", "Horloge", "Modules"
     }
 
     for i, name in ipairs(tabDefs) do
         local tab = CreateFrame("Button", nil, tabRow, "BackdropTemplate")
-        tab:SetSize(42, 22)
-        tab:SetPoint("LEFT", tabRow, "LEFT", (i-1)*43, 0)
+        tab:SetSize(37, 22)
+        tab:SetPoint("LEFT", tabRow, "LEFT", (i-1)*38, 0)
         pcall(function()
             tab:SetBackdrop({bgFile=WHITE, edgeFile=WHITE, edgeSize=1})
             tab:SetBackdropColor(0.1, 0.1, 0.15, 0.9)
@@ -300,6 +303,7 @@ local function _buildMain()
     PSUI:_BuildAurasPage()
     PSUI:_BuildActionBarsPage()
     PSUI:_BuildMinimapPage()
+    PSUI:_BuildClockPage()
     PSUI:_BuildModulesPage()
 
     PSUI:ShowTab("Sphère")
@@ -320,14 +324,24 @@ function PSUI:ShowTab(name)
             active and 0.5 or 0.75, 1)
     end
     for n, page in pairs(self._pages) do
-        if n == name then page:Show() else page:Hide() end
+        local show = (n == name)
+        if show then page:Show() else page:Hide() end
+        if page._scroll then
+            if show then page._scroll:Show() else page._scroll:Hide() end
+        end
     end
     self._curTab = name
 end
 
 local function _newPage(content)
-    local p = CreateFrame("Frame", nil, content)
-    p:SetAllPoints(content)
+    -- ScrollFrame englobant : permet aux pages longues de défiler.
+    local scroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+    scroll:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", -22, 0)
+    local p = CreateFrame("Frame", nil, scroll)
+    p:SetSize(content:GetWidth() - 22, 800)
+    scroll:SetScrollChild(p)
+    p._scroll = scroll
     p:Hide()
     return p
 end
@@ -391,11 +405,16 @@ function PSUI:_BuildColorsPage()
     _label(p, "Bordure décorative", 8, -196, 11)
     _check(p, "Activée", "borderEnabled", 8, -210)
     _dropdown(p, "Style", {
-        {label="Solide",       value="solide"},
-        {label="Horde",        value="wow_horde"},
-        {label="Alliance",     value="wow_alliance"},
-        {label="Horde Fer",    value="ns_horde"},
-        {label="Alliance Or",  value="ns_alliance"},
+        {label="Solide",        value="solide"},
+        {label="Classique",     value="classique"},
+        {label="Shadow Circle", value="shadowcircle"},
+        {label="Détail",        value="detail"},
+        {label="Horde Fer",     value="ns_horde"},
+        {label="Alliance Or",   value="ns_alliance"},
+        {label="Vide",          value="ns_void"},
+        {label="Bête",          value="ns_beast"},
+        {label="Obsidienne",    value="ns_obsidian"},
+        {label="Anneau Or",     value="ns_gold_ring"},
     }, "borderStyle", 8, -244)
     _dropdown(p, "Couleur", {
         {label="Custom", value="custom"},
@@ -403,6 +422,7 @@ function PSUI:_BuildColorsPage()
     }, "borderColorMode", 160, -244)
     _slider(p, "Opacité bordure", "borderA", 0.0, 1.0, 0.01, 8, -286)
     _slider(p, "Taille bordure (×)", "border_size_ratio", 1.0, 2.5, 0.05, 160, -286)
+    _check(p, "Pulse de la bordure", "border_glow_pulse", 8, -306)
 
     _divider(p, -322)
     _label(p, "Midnight Star", 8, -328, 11)
@@ -422,13 +442,46 @@ function PSUI:_BuildCastbarPage()
             pcall(SUF.CastBar.Reset, SUF.CastBar, SUF.player)
         end
     end)
+    _check(p, "Couleur par classe",       "castbar_color_by_class", 160, -10)
     _dropdown(p, "Style", {
-        {label="Circulaire", value="circular"},
-        {label="Classique",  value="classic"},
+        {label="Circulaire",       value="circular"},
+        {label="Classique",        value="classic"},
+        {label="Collapse Glow",    value="collapse_glow"},
     }, "castbar_style", 8, -36)
-    _check(p, "Afficher l'icône du sort", "castbar_show_icon", 8, -76)
-    _check(p, "Afficher le temps restant", "castbar_show_time",  8, -98)
-    _slider(p, "Taille police temps", "castbar_time_font_size", 8, 24, 1, 8, -124)
+    _dropdown(p, "Preset", {
+        {label="Minimal",   value="minimal"},
+        {label="Overwatch", value="overwatch"},
+        {label="Techno",    value="techno"},
+    }, "castbar_preset", 160, -36)
+
+    _divider(p, -82)
+    _label(p, "Affichage", 8, -88, 11)
+    _check(p, "Icône du sort",   "castbar_show_icon", 8,   -102)
+    _check(p, "Nom du sort",     "castbar_show_name", 160, -102)
+    _check(p, "Temps restant",   "castbar_show_time", 8,   -124)
+    _check(p, "Anneau de fond",  "castbar_show_track",160, -124)
+    _check(p, "Ticks (24)",      "castbar_show_ticks",8,   -146)
+    _check(p, "Pin top (12h)",   "castbar_show_pin12",160, -146)
+    _check(p, "Mode focus",      "castbar_focus_mode",8,   -168)
+
+    _divider(p, -200)
+    _label(p, "Effets", 8, -206, 11)
+    _check(p, "Flash de complétion",  "castbar_complete_flash", 8,   -220)
+    _check(p, "Shards interrupt",     "castbar_show_kick_fx",   160, -220)
+    _check(p, "Marque d'interrupt",   "castbar_interrupt_mark_enabled", 8, -242)
+    _slider(p, "Intensité glow",      "castbar_glow_intensity", 0.0, 2.0, 0.05, 8, -270)
+    _slider(p, "Épaisseur arc",       "castbar_arc_thickness", 4, 30, 1, 160, -270)
+
+    _divider(p, -310)
+    _label(p, "Collapse Glow Ring", 8, -316, 11)
+    _slider(p, "Échelle départ",  "castbar_collapse_start_scale", 1.0, 3.0, 0.05, 8, -330)
+    _slider(p, "Échelle finale",  "castbar_collapse_end_scale", 0.3, 1.5, 0.05, 160, -330)
+    _slider(p, "Opacité",         "castbar_collapse_alpha", 0.0, 1.0, 0.05, 8, -372)
+    _check(p, "Pulse",            "castbar_collapse_glow_pulse", 160, -372)
+
+    _divider(p, -410)
+    _slider(p, "Taille police temps", "castbar_time_font_size", 8, 24, 1, 8, -420)
+    _slider(p, "Taille police nom",   "castbar_name_font_size", 8, 24, 1, 160, -420)
 end
 
 -- ─── Page Auras ───────────────────────────────────────────────────────────────
@@ -495,6 +548,12 @@ function PSUI:_BuildActionBarsPage()
     _slider(p, "Espacement (overlap)",       "actionbar_tri_spacing", 0.7, 1.2, 0.02, 8, -252, rebuild)
     _slider(p, "Marge orbe (px)",            "actionbar_gap", 0, 40, 1, 8, -294, rebuild)
     _slider(p, "Opacité cadre",              "actionbar_frame_alpha", 0.0, 1.0, 0.05, 8, -336, rebuild)
+
+    _divider(p, -372)
+    _label(p, "Raccourcis clavier", 8, -378, 11)
+    _check(p, "Afficher",  "actionbar_show_keybinds", 8,   -394, rebuild)
+    _slider(p, "Taille",   "actionbar_keybind_size",  6, 16, 1,   160, -394, rebuild)
+    _slider(p, "Opacité",  "actionbar_keybind_alpha", 0.0, 1.0, 0.05, 8, -432, rebuild)
 end
 
 -- ─── Page Minimap ─────────────────────────────────────────────────────────────
@@ -534,6 +593,37 @@ function PSUI:_BuildMinimapPage()
             pcall(SUF.Minimap.Integrate, SUF.Minimap)
         end
     end)
+end
+
+-- ─── Page Horloge ─────────────────────────────────────────────────────────────
+function PSUI:_BuildClockPage()
+    local p = _newPage(self._content)
+    self._pages["Horloge"] = p
+
+    local function refresh()
+        if SUF.Clock then pcall(SUF.Clock.Refresh, SUF.Clock) end
+    end
+
+    _check(p, "Activer l'horloge", "clock_enabled", 8, -10, refresh)
+    _dropdown(p, "Format", {
+        {label="24 heures", value="24h"},
+        {label="12 heures", value="12h"},
+    }, "clock_format", 8, -36, refresh)
+    _dropdown(p, "Position", {
+        {label="Au-dessus de l'orbe", value="orb_top"},
+        {label="En-dessous de l'orbe", value="orb_bottom"},
+        {label="Coin écran",           value="screen_corner"},
+    }, "clock_position", 8, -78, refresh)
+
+    _divider(p, -126)
+    _label(p, "Informations supplémentaires", 8, -132, 11)
+    _check(p, "Heure serveur",  "clock_show_server", 8,   -148, refresh)
+    _check(p, "FPS",            "clock_show_fps",    160, -148, refresh)
+    _check(p, "Latence (ms)",   "clock_show_ms",     8,   -170, refresh)
+
+    _divider(p, -200)
+    _slider(p, "Taille du texte",  "clock_font_size", 8, 20, 1, 8, -210, refresh)
+    _slider(p, "Opacité",          "clock_alpha", 0.0, 1.0, 0.05, 8, -252)
 end
 
 -- ─── Page Modules ─────────────────────────────────────────────────────────────

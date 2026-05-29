@@ -112,6 +112,23 @@ function CastBar:Init(data)
     glowRing:SetVertexColor(CLR_CAST.r, CLR_CAST.g, CLR_CAST.b)
     glowRing:SetAlpha(0)
 
+    -- ── Collapse Glow Ring : grand anneau qui rétrécit jusqu'à l'arc ──────
+    local collapseRing = arcFrame:CreateTexture(nil, "OVERLAY", nil, 2)
+    collapseRing:SetTexture("Interface\\Cooldown\\ping4")
+    collapseRing:SetBlendMode("ADD")
+    collapseRing:SetPoint("CENTER", arcFrame, "CENTER")
+    collapseRing:SetSize(arcSize, arcSize)
+    collapseRing:SetVertexColor(CLR_CAST.r, CLR_CAST.g, CLR_CAST.b, 0)
+    collapseRing:Hide()
+
+    -- ── Interrupt mark : croix rouge flash sur interrupt ──────────────────
+    local interruptMark = arcFrame:CreateTexture(nil, "OVERLAY", nil, 5)
+    interruptMark:SetTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
+    interruptMark:SetSize(20, 20)
+    interruptMark:SetPoint("CENTER", arcFrame, "CENTER")
+    interruptMark:SetVertexColor(0.95, 0.20, 0.20, 1)
+    interruptMark:SetAlpha(0)
+
     -- ── Classic pill bar ──────────────────────────────────────────────────────
     local pill = CreateFrame("StatusBar", nil, root)
     pill:SetSize(size, 12)
@@ -178,10 +195,12 @@ function CastBar:Init(data)
 
     -- ── Assemble ─────────────────────────────────────────────────────────────
     data.castbar = {
-        arcFrame    = arcFrame,
-        cd          = cd,
-        glowRing    = glowRing,
-        pill        = pill,
+        arcFrame      = arcFrame,
+        cd            = cd,
+        glowRing      = glowRing,
+        collapseRing  = collapseRing,
+        interruptMark = interruptMark,
+        pill          = pill,
         iconFrm     = iconFrm,
         iconTex     = iconTex,
         iconBorder  = iconBorder,
@@ -267,6 +286,20 @@ function CastBar:_OnEvent(event, unit, ...)
         if cb.iconBorder then cb.iconBorder:SetVertexColor(CLR_BROKEN.r, CLR_BROKEN.g, CLR_BROKEN.b) end
         local pillTex = cb.pill and cb.pill:GetStatusBarTexture()
         if pillTex then pillTex:SetVertexColor(CLR_BROKEN.r, CLR_BROKEN.g, CLR_BROKEN.b, 1) end
+        -- Interrupt mark flash
+        local cfg = SUF.db
+        if cfg.castbar_interrupt_mark_enabled ~= false and cb.interruptMark then
+            local sz = cfg.castbar_interrupt_mark_size or 18
+            cb.interruptMark:SetSize(sz * 1.6, sz * 1.6)
+            cb.interruptMark:SetAlpha(1)
+            local dur = cfg.castbar_interrupt_mark_duration or 0.42
+            local fadeOut = cb.interruptMark:CreateAnimationGroup()
+            local a1 = fadeOut:CreateAnimation("Alpha")
+            a1:SetFromAlpha(1); a1:SetToAlpha(0); a1:SetDuration(dur)
+            local sc = fadeOut:CreateAnimation("Scale")
+            sc:SetFromScale(1.6, 1.6); sc:SetToScale(0.4, 0.4); sc:SetDuration(dur)
+            fadeOut:Play()
+        end
         C_Timer.After(0.4, function()
             if data.castbar and not data.castbar.active then return end
             CastBar:Reset(data)
@@ -318,11 +351,15 @@ function CastBar:_StartCast(data, isChannel, spellId, startSec, endSec, interrup
     local showCirc  = (mode == "circular" or mode == "segments")
     local showPill  = (mode == "classic")
 
+    local showCollapse = (mode == "collapse_glow")
     if cb.arcFrame then
-        if showCirc then cb.arcFrame:Show() else cb.arcFrame:Hide() end
+        if showCirc or showCollapse then cb.arcFrame:Show() else cb.arcFrame:Hide() end
     end
     if cb.pill then
         if showPill then cb.pill:Show() else cb.pill:Hide() end
+    end
+    if cb.collapseRing then
+        if showCollapse then cb.collapseRing:Show() else cb.collapseRing:Hide() end
     end
     if cb.iconFrm then
         cb.iconFrm:Show()
@@ -391,6 +428,21 @@ function CastBar:Tick(data, now)
         else
             cb.glowRing:SetAlpha(0)
         end
+    end
+
+    -- Collapse Glow Ring : grand anneau qui rétrécit vers l'arc
+    if cb.collapseRing and cb.collapseRing:IsShown() then
+        local p = math.max(0, math.min(1, (now - cb.startTime) / dur))
+        local s0 = cfg.castbar_collapse_start_scale or 1.75
+        local s1 = cfg.castbar_collapse_end_scale   or 0.72
+        local scale = s0 + (s1 - s0) * p
+        local sz = ((cfg.orbSize or 160) + 28) * scale
+        cb.collapseRing:SetSize(sz, sz)
+        local baseA = (cfg.castbar_collapse_alpha or 0.85)
+        local pulse = cfg.castbar_collapse_glow_pulse
+                      and (0.85 + 0.15 * math.sin(now * 6))
+                      or 1.0
+        cb.collapseRing:SetVertexColor(cb.color.r, cb.color.g, cb.color.b, baseA * pulse)
     end
 
     -- Expiration
