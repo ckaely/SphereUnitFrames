@@ -271,14 +271,16 @@ local function _buildMain()
     PSUI._pages   = {}
 
     -- ── Créer les onglets ────────────────────────────────────────────────────
+    -- Un onglet par module clairement séparé
     local tabDefs = {
-        "Sphère", "Couleurs", "Castbar", "Auras", "Barres", "Minimap", "Horloge", "Modules"
+        "Sphère", "Couleurs", "Castbar", "Auras",
+        "Sorts", "Carte", "Horloge", "Micro", "XP", "Modules"
     }
 
     for i, name in ipairs(tabDefs) do
         local tab = CreateFrame("Button", nil, tabRow, "BackdropTemplate")
-        tab:SetSize(37, 22)
-        tab:SetPoint("LEFT", tabRow, "LEFT", (i-1)*38, 0)
+        tab:SetSize(30, 22)
+        tab:SetPoint("LEFT", tabRow, "LEFT", (i-1)*31, 0)
         pcall(function()
             tab:SetBackdrop({bgFile=WHITE, edgeFile=WHITE, edgeSize=1})
             tab:SetBackdropColor(0.1, 0.1, 0.15, 0.9)
@@ -301,9 +303,11 @@ local function _buildMain()
     PSUI:_BuildColorsPage()
     PSUI:_BuildCastbarPage()
     PSUI:_BuildAurasPage()
-    PSUI:_BuildActionBarsPage()
-    PSUI:_BuildMinimapPage()
+    PSUI:_BuildActionBarsPage()  -- onglet "Sorts"
+    PSUI:_BuildMinimapPage()     -- onglet "Carte"
     PSUI:_BuildClockPage()
+    PSUI:_BuildMicroPage()
+    PSUI:_BuildXPPage()
     PSUI:_BuildModulesPage()
 
     PSUI:ShowTab("Sphère")
@@ -528,7 +532,7 @@ end
 -- ─── Page Barres d'action ─────────────────────────────────────────────────────
 function PSUI:_BuildActionBarsPage()
     local p = _newPage(self._content)
-    self._pages["Barres"] = p
+    self._pages["Sorts"] = p
 
     local function rebuild()
         if SUF.ActionBars then pcall(SUF.ActionBars.Rebuild, SUF.ActionBars) end
@@ -565,7 +569,7 @@ end
 -- ─── Page Minimap ─────────────────────────────────────────────────────────────
 function PSUI:_BuildMinimapPage()
     local p = _newPage(self._content)
-    self._pages["Minimap"] = p
+    self._pages["Carte"] = p
 
     _check(p, "Activer minimap", "minimap_enabled", 8, -10)
     _dropdown(p, "Mode minimap", {
@@ -632,6 +636,59 @@ function PSUI:_BuildClockPage()
     _slider(p, "Opacité",          "clock_alpha", 0.0, 1.0, 0.05, 8, -252)
 end
 
+-- ─── Page Micro ──────────────────────────────────────────────────────────────
+function PSUI:_BuildMicroPage()
+    local p = _newPage(self._content)
+    self._pages["Micro"] = p
+
+    local function refresh()
+        if SUF.MicroMenu then pcall(SUF.MicroMenu.Refresh, SUF.MicroMenu) end
+    end
+
+    _check(p, "Activer le micro menu", "micromenu_enabled", 8, -10, refresh)
+    _dropdown(p, "Position", {
+        {label="Sous l'orbe",        value="bottom"},
+        {label="Au-dessus de l'orbe", value="top"},
+    }, "micromenu_position", 8, -36, refresh)
+
+    _divider(p, -80)
+    _slider(p, "Taille des boutons", "micromenu_btn_size",   18, 40, 1, 8, -90, refresh)
+    _slider(p, "Espacement",         "micromenu_btn_space",  0,  10, 1, 8, -132, refresh)
+
+    _divider(p, -170)
+    _label(p, "Le micro menu contient :", 8, -178, 11)
+    _label(p, "Personnage · Sorts · Talents · Hauts faits", 8, -198, 10)
+    _label(p, "Quêtes · Sociaux · Collections · Boutique · Menu", 8, -214, 10)
+end
+
+-- ─── Page XP ─────────────────────────────────────────────────────────────────
+function PSUI:_BuildXPPage()
+    local p = _newPage(self._content)
+    self._pages["XP"] = p
+
+    local function refresh()
+        if SUF.XPBar then pcall(SUF.XPBar.Refresh, SUF.XPBar) end
+    end
+
+    _check(p, "Activer la barre d'XP", "xpbar_enabled", 8, -10, refresh)
+
+    _divider(p, -42)
+    _label(p, "Géométrie", 8, -48, 11)
+    _slider(p, "Rayon (× orbSize)", "xpbar_radius_ratio", 0.40, 1.20, 0.02, 8, -64, refresh)
+    _slider(p, "Largeur segments",  "xpbar_seg_width",    10,   80,   1,   8, -106, refresh)
+    _slider(p, "Hauteur segments",  "xpbar_seg_height",   3,    16,   1,   8, -148, refresh)
+
+    _divider(p, -186)
+    _label(p, "Couleur violette (R / G / B)", 8, -192, 11)
+    _slider(p, "R", "xpbar_lit_r", 0.0, 1.0, 0.01, 8,  -206, refresh)
+    _slider(p, "G", "xpbar_lit_g", 0.0, 1.0, 0.01, 8,  -248, refresh)
+    _slider(p, "B", "xpbar_lit_b", 0.0, 1.0, 0.01, 8,  -290, refresh)
+
+    _divider(p, -328)
+    _slider(p, "Opacité ombre",   "xpbar_shadow_alpha",  0.0, 1.0, 0.05, 8, -340, refresh)
+    _slider(p, "Opacité contour", "xpbar_outline_alpha", 0.0, 1.0, 0.05, 8, -382, refresh)
+end
+
 -- ─── Page Modules ─────────────────────────────────────────────────────────────
 function PSUI:_BuildModulesPage()
     local p = _newPage(self._content)
@@ -661,37 +718,13 @@ function PSUI:_BuildModulesPage()
     _slider(p, "Seuil d'alerte (ms)", "perf_seuil_ms", 1.0, 30.0, 0.5, 8, -368)
 
     _divider(p, -396)
-    _label(p, "|cFFCCAAFFBarre d'XP|r", 8, -402, 11)
-    _check(p, "Activée", "xpbar_enabled", 8, -416, function()
-        if SUF.XPBar then pcall(SUF.XPBar.Refresh, SUF.XPBar) end
-    end)
-    _slider(p, "Rayon",    "xpbar_radius_ratio", 0.4, 1.0, 0.02, 8, -440, function()
-        if SUF.XPBar then pcall(SUF.XPBar.Refresh, SUF.XPBar) end
-    end)
-    _slider(p, "Hauteur segments", "xpbar_seg_height", 3, 16, 1, 8, -482, function()
-        if SUF.XPBar then pcall(SUF.XPBar.Refresh, SUF.XPBar) end
-    end)
-
-    _divider(p, -520)
-    _label(p, "|cFFFFCC99Micro menu|r", 8, -526, 11)
-    _check(p, "Activé", "micromenu_enabled", 8, -540, function()
-        if SUF.MicroMenu then pcall(SUF.MicroMenu.Refresh, SUF.MicroMenu) end
-    end)
-    _dropdown(p, "Position", {
-        {label="Sous l'orbe",       value="bottom"},
-        {label="Au-dessus de l'orbe", value="top"},
-    }, "micromenu_position", 8, -560, function()
-        if SUF.MicroMenu then pcall(SUF.MicroMenu.Refresh, SUF.MicroMenu) end
-    end)
-
-    _divider(p, -610)
-    _label(p, "|cFFAACCFFProfils|r", 8, -616, 11)
+    _label(p, "|cFFAACCFFProfils|r", 8, -402, 11)
     local list = (SUF.Profiles and SUF.Profiles:List()) or {}
     local cur  = (SUF.Profiles and SUF.Profiles:Current()) or "Default"
     local opts = {}
     for _, n in ipairs(list) do opts[#opts+1] = {label=n, value=n} end
     if #opts == 0 then opts[1] = {label=cur, value=cur} end
-    _dropdown(p, "Profil actuel", opts, "_dummy_profile", 8, -632, function(v)
+    _dropdown(p, "Profil actuel", opts, "_dummy_profile", 8, -422, function(v)
         if SUF.Profiles then pcall(SUF.Profiles.SwitchTo, SUF.Profiles, v) end
     end)
     -- Boutons profil
@@ -710,8 +743,8 @@ function PSUI:_BuildModulesPage()
         b:SetScript("OnClick", action)
         return b
     end
-    _profBtn("Reset",     8,   -674, function() if SUF.Profiles then pcall(SUF.Profiles.Reset, SUF.Profiles) end end)
-    _profBtn("Dupliquer", 84,  -674, function() if SUF.Profiles and SUF.Profiles:Current() then pcall(SUF.Profiles.Duplicate, SUF.Profiles, SUF.Profiles:Current()) end end)
+    _profBtn("Reset",     8,   -464, function() if SUF.Profiles then pcall(SUF.Profiles.Reset, SUF.Profiles) end end)
+    _profBtn("Dupliquer", 84,  -464, function() if SUF.Profiles and SUF.Profiles:Current() then pcall(SUF.Profiles.Duplicate, SUF.Profiles, SUF.Profiles:Current()) end end)
 end
 
 -- ─── API publique ─────────────────────────────────────────────────────────────

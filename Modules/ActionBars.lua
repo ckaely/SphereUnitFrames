@@ -59,6 +59,55 @@ local function _absSlot(baseBar, startSlot, seqIndex)
 end
 
 -- ─── Création d'un bouton triangulaire ────────────────────────────────────────
+-- ─── Cast tint : progression orange → vert sur le fill du triangle ──────────
+-- Le triangle du sort en cours passe progressivement d'orange à vert.
+-- Pour les instants, c'est un mini 0.30 s. Pour un cast time, la transition
+-- couvre la durée réelle du cast.
+local CAST_R0, CAST_G0, CAST_B0 = 1.00, 0.50, 0.05   -- orange (début)
+local CAST_R1, CAST_G1, CAST_B1 = 0.20, 0.95, 0.25   -- vert (fin)
+local CAST_A                    = 0.88
+local FILL_REST_R, FILL_REST_G, FILL_REST_B, FILL_REST_A = 0.03, 0.03, 0.05, 0.55
+
+local function _startCastTint(btn, duration)
+    if not btn then return end
+    btn._castTint = { t0 = GetTime(), dur = math.max(0.25, duration or 0.30) }
+end
+
+local function _stopCastTint(btn)
+    if not btn then return end
+    btn._castTint = nil
+    if btn._fillTex then
+        btn._fillTex:SetVertexColor(FILL_REST_R, FILL_REST_G, FILL_REST_B, FILL_REST_A)
+    end
+end
+
+local function _completeCastTint(btn)
+    -- Snap vert + maintien court avant fade
+    if not btn or not btn._castTint then return end
+    btn._castTint.t0  = GetTime() - btn._castTint.dur
+    btn._castTint.hold = GetTime() + 0.18
+end
+
+local function _tickCastTint(btn)
+    if not (btn and btn._castTint and btn._fillTex) then return end
+    local now = GetTime()
+    local p = (now - btn._castTint.t0) / btn._castTint.dur
+    if p >= 1 then
+        btn._fillTex:SetVertexColor(CAST_R1, CAST_G1, CAST_B1, CAST_A)
+        if btn._castTint.hold and now > btn._castTint.hold then
+            _stopCastTint(btn)
+        elseif not btn._castTint.hold then
+            btn._castTint.hold = now + 0.12
+        end
+        return
+    end
+    if p < 0 then p = 0 end
+    local r = CAST_R0 + (CAST_R1 - CAST_R0) * p
+    local g = CAST_G0 + (CAST_G1 - CAST_G0) * p
+    local b = CAST_B0 + (CAST_B1 - CAST_B0) * p
+    btn._fillTex:SetVertexColor(r, g, b, CAST_A)
+end
+
 -- ─── TriCooldown : spark qui parcourt le périmètre du triangle ────────────────
 local function _attachTriCooldown(btn, triPath, btnSize)
     local cfg = SUF.db
@@ -96,6 +145,8 @@ local function _attachTriCooldown(btn, triPath, btnSize)
 
     btn._cdTick = 0
     btn:HookScript("OnUpdate", function(self, elapsed)
+        -- Cast tint (orange → vert) : tick chaque frame, non throttlé
+        _tickCastTint(self)
         if not SUF.db or SUF.db.actionbar_cd_runner == false then
             if spark:IsShown() then spark:Hide() end
             return
@@ -207,14 +258,8 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
         iconTex:Show()
     end
 
-    -- ── Flash de cast triangulaire (jaune au moment du cast) ──────────────
-    local castFlash = btn:CreateTexture(nil, "OVERLAY", nil, 6)
-    castFlash:SetTexture(triPath)
-    castFlash:SetAllPoints(btn)
-    castFlash:SetBlendMode("ADD")
-    castFlash:SetVertexColor(1.0, 0.85, 0.15, 1)
-    castFlash:SetAlpha(0)
-    btn._castFlash = castFlash
+    -- (L'animation de cast est désormais une PROGRESSION de couleur orange→vert
+    -- sur le fill du triangle, gérée par _tickCastTint dans l'OnUpdate.)
 
     -- ── Masquer TOUTES les sous-textures natives carrées ─────────────────
     -- ActionBarButtonTemplate insère beaucoup d'éléments (Border, SlotArt,
@@ -480,36 +525,47 @@ function ActionBars:UpdateAll()
     if self._rightButtons then for _, b in ipairs(self._rightButtons) do _updateButton(b) end end
 end
 
--- ─── Cast flash triangulaire (remplace l'animation Blizzard) ─────────────────
-local function _playCastFlash(btn)
-    if not btn or not btn._castFlash then return end
-    local f = btn._castFlash
-    f:SetAlpha(0.95)
-    f:SetScale(1.0)
-    local g = f:CreateAnimationGroup()
-    local sc = g:CreateAnimation("Scale")
-    sc:SetFromScale(1.0, 1.0); sc:SetToScale(1.4, 1.4); sc:SetDuration(0.32)
-    local fa = g:CreateAnimation("Alpha")
-    fa:SetFromAlpha(0.95); fa:SetToAlpha(0); fa:SetDuration(0.32)
-    g:SetScript("OnFinished", function() f:SetAlpha(0); f:SetScale(1.0) end)
-    g:Play()
+-- ─── Cast progression (orange→vert sur le triangle du sort) ──────────────────
+-- Match du spellID au slot (gère sort + macro).
+local function _matchSpell(b, spellID)
+    if not b or not b._actionSlot then return false end
+    local ok, atype, id = pcall(GetActionInfo, b._actionSlot)
+    if not ok then return false end
+    if atype == "spell" and id == spellID then return true end
+    if atype == "macro" and id then
+        local okM, macroSpellID = pcall(GetMacroSpell, id)
+        if okM and macroSpellID == spellID then return true end
+    end
+    return false
 end
 
-function ActionBars:_FlashSpell(spellID)
+function ActionBars:_StartCastProgress(spellID, duration)
     if not spellID then return end
-    local function checkBtn(b)
-        if not b or not b._actionSlot then return end
-        local ok, atype, id = pcall(GetActionInfo, b._actionSlot)
-        if ok and atype == "spell" and id == spellID then
-            _playCastFlash(b)
-        elseif ok and atype == "macro" then
-            -- Pour les macros, on flash si le sort correspond au sort principal
-            local okM, macroSpellID = pcall(GetMacroSpell, id or 0)
-            if okM and macroSpellID == spellID then _playCastFlash(b) end
+    local function check(b) if _matchSpell(b, spellID) then _startCastTint(b, duration) end end
+    if self._leftButtons  then for _, b in ipairs(self._leftButtons)  do check(b) end end
+    if self._rightButtons then for _, b in ipairs(self._rightButtons) do check(b) end end
+end
+
+function ActionBars:_SucceededSpell(spellID)
+    if not spellID then return end
+    local function check(b)
+        if _matchSpell(b, spellID) then
+            if b._castTint then
+                _completeCastTint(b)        -- cast time : snap au vert et fade
+            else
+                _startCastTint(b, 0.30)     -- instant : mini transition orange→vert
+            end
         end
     end
-    if self._leftButtons  then for _, b in ipairs(self._leftButtons)  do checkBtn(b) end end
-    if self._rightButtons then for _, b in ipairs(self._rightButtons) do checkBtn(b) end end
+    if self._leftButtons  then for _, b in ipairs(self._leftButtons)  do check(b) end end
+    if self._rightButtons then for _, b in ipairs(self._rightButtons) do check(b) end end
+end
+
+function ActionBars:_StopSpell(spellID)
+    if not spellID then return end
+    local function check(b) if _matchSpell(b, spellID) then _stopCastTint(b) end end
+    if self._leftButtons  then for _, b in ipairs(self._leftButtons)  do check(b) end end
+    if self._rightButtons then for _, b in ipairs(self._rightButtons) do check(b) end end
 end
 
 -- Frame d'events (créé une fois)
@@ -529,12 +585,37 @@ function ActionBars:_ensureEvents()
     e:RegisterEvent("SPELL_ACTIVATION_OVERLAY_SHOW")
     e:RegisterEvent("SPELL_ACTIVATION_OVERLAY_HIDE")
     e:RegisterEvent("PLAYER_REGEN_ENABLED")
-    -- Flash de cast triangulaire sur succès
-    e:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+    -- Progression de cast (orange → vert) sur le triangle du sort
+    e:RegisterUnitEvent("UNIT_SPELLCAST_START",           "player")
+    e:RegisterUnitEvent("UNIT_SPELLCAST_STOP",            "player")
+    e:RegisterUnitEvent("UNIT_SPELLCAST_FAILED",          "player")
+    e:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED",     "player")
+    e:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED",       "player")
+    e:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START",   "player")
+    e:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP",    "player")
     e:SetScript("OnEvent", function(_, ev, arg1, _, arg3)
-        if ev == "UNIT_SPELLCAST_SUCCEEDED" then
-            -- arg1=unit, arg2=castGUID, arg3=spellID
-            if SUF.ActionBars then SUF.ActionBars:_FlashSpell(arg3) end
+        if ev == "UNIT_SPELLCAST_START" then
+            -- récupère la durée du cast
+            local dur
+            pcall(function()
+                local _, _, _, sMS, eMS = UnitCastingInfo("player")
+                if sMS and eMS then dur = (eMS - sMS) / 1000 end
+            end)
+            if SUF.ActionBars then SUF.ActionBars:_StartCastProgress(arg3, dur) end
+        elseif ev == "UNIT_SPELLCAST_CHANNEL_START" then
+            local dur
+            pcall(function()
+                local _, _, _, sMS, eMS = UnitChannelInfo("player")
+                if sMS and eMS then dur = (eMS - sMS) / 1000 end
+            end)
+            if SUF.ActionBars then SUF.ActionBars:_StartCastProgress(arg3, dur) end
+        elseif ev == "UNIT_SPELLCAST_SUCCEEDED" then
+            if SUF.ActionBars then SUF.ActionBars:_SucceededSpell(arg3) end
+        elseif ev == "UNIT_SPELLCAST_STOP"
+            or ev == "UNIT_SPELLCAST_FAILED"
+            or ev == "UNIT_SPELLCAST_INTERRUPTED"
+            or ev == "UNIT_SPELLCAST_CHANNEL_STOP" then
+            if SUF.ActionBars then SUF.ActionBars:_StopSpell(arg3) end
         elseif ev == "ACTIONBAR_SLOT_CHANGED" then
             if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
         else
