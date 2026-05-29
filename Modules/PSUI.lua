@@ -564,6 +564,18 @@ function PSUI:_BuildActionBarsPage()
     _check(p, "Afficher",  "actionbar_show_keybinds", 8,   -394, rebuild)
     _slider(p, "Taille",   "actionbar_keybind_size",  6, 16, 1,   160, -394, rebuild)
     _slider(p, "Opacité",  "actionbar_keybind_alpha", 0.0, 1.0, 0.05, 8, -432, rebuild)
+
+    _divider(p, -470)
+    _label(p, "|cFFFFAAAACacher l'UI Blizzard|r", 8, -478, 11)
+    _check(p, "Barres d'action",  "hide_blizzard_action_bars", 8,   -494, function()
+        if SUF.ActionBars then pcall(SUF.ActionBars.HideBlizzardUI, SUF.ActionBars) end
+    end)
+    _check(p, "Barre d'XP",       "hide_blizzard_xp_bar", 160, -494, function()
+        if SUF.ActionBars then pcall(SUF.ActionBars.HideBlizzardUI, SUF.ActionBars) end
+    end)
+    _check(p, "Micro menu natif", "hide_blizzard_micromenu", 8, -516, function()
+        if SUF.ActionBars then pcall(SUF.ActionBars.HideBlizzardUI, SUF.ActionBars) end
+    end)
 end
 
 -- ─── Page Minimap ─────────────────────────────────────────────────────────────
@@ -646,19 +658,18 @@ function PSUI:_BuildMicroPage()
     end
 
     _check(p, "Activer le micro menu", "micromenu_enabled", 8, -10, refresh)
-    _dropdown(p, "Position", {
-        {label="Sous l'orbe",        value="bottom"},
-        {label="Au-dessus de l'orbe", value="top"},
-    }, "micromenu_position", 8, -36, refresh)
 
-    _divider(p, -80)
-    _slider(p, "Taille des boutons", "micromenu_btn_size",   18, 40, 1, 8, -90, refresh)
-    _slider(p, "Espacement",         "micromenu_btn_space",  0,  10, 1, 8, -132, refresh)
+    _divider(p, -42)
+    _slider(p, "Taille des boutons", "micromenu_btn_size",   16, 36,   1, 8, -52, refresh)
+    _slider(p, "Espacement",         "micromenu_btn_space",  0,  10,   1, 8, -94, refresh)
+    _slider(p, "Opacité au repos",   "micromenu_idle_alpha", 0.0, 1.0, 0.05, 8, -136, refresh)
 
-    _divider(p, -170)
-    _label(p, "Le micro menu contient :", 8, -178, 11)
-    _label(p, "Personnage · Sorts · Talents · Hauts faits", 8, -198, 10)
-    _label(p, "Quêtes · Sociaux · Collections · Boutique · Menu", 8, -214, 10)
+    _divider(p, -176)
+    _label(p, "Comportement :", 8, -184, 11)
+    _label(p, "• Discret en bas d'écran (fade)", 8, -200, 10)
+    _label(p, "• Survol → opacité 100% + zoom dock", 8, -216, 10)
+    _label(p, "• Dernier bouton → sous-menu addons", 8, -232, 10)
+    _label(p, "  (regroupe les boutons minimap LibDBIcon)", 8, -248, 10)
 end
 
 -- ─── Page XP ─────────────────────────────────────────────────────────────────

@@ -243,6 +243,10 @@ SUF.defaults = {
         actionbar_frame_alpha    = 0.55,        -- subtil par défaut (sombre transparent)
         actionbar_glow_procs     = true,
         actionbar_range_check    = true,
+        -- Cacher l'UI Blizzard remplacée par SUF
+        hide_blizzard_action_bars = true,
+        hide_blizzard_xp_bar      = true,
+        hide_blizzard_micromenu   = true,
         -- Cooldown triangulaire premium (edge runner)
         actionbar_cd_runner      = true,
         actionbar_cd_runner_size = 0.32,   -- ratio btnSize
@@ -276,10 +280,12 @@ SUF.defaults = {
         xpbar_outline_alpha = 0.85,
 
         -- Micro menu (Personnage / Sorts / Talents / Hauts faits / ...)
-        micromenu_enabled  = true,
-        micromenu_position = "bottom",   -- "top"|"bottom" (par rapport à l'orbe)
-        micromenu_btn_size = 26,
-        micromenu_btn_space= 2,
+        -- Style fantasy fade-in (bas écran), zoom dock macOS au survol,
+        -- sous-menu Addons regroupant les boutons minimap (LibDBIcon).
+        micromenu_enabled    = true,
+        micromenu_btn_size   = 22,
+        micromenu_btn_space  = 4,
+        micromenu_idle_alpha = 0.30,    -- fade par défaut (1.0 au survol)
 
         -- Horloge intégrée
         clock_enabled      = true,

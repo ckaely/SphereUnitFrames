@@ -76,9 +76,13 @@ end
 local function _stopCastTint(btn)
     if not btn then return end
     btn._castTint = nil
+    -- Le prochain _updateButton recolorera selon la couleur dominante du sort.
+    -- Reset transitoire vers le sombre par défaut en attendant.
     if btn._fillTex then
         btn._fillTex:SetVertexColor(FILL_REST_R, FILL_REST_G, FILL_REST_B, FILL_REST_A)
     end
+    -- Force la mise à jour pour repeindre la couleur du sort
+    if SUF.ActionBars then SUF.ActionBars:UpdateAll() end
 end
 
 local function _completeCastTint(btn)
@@ -179,6 +183,32 @@ local function _attachTriCooldown(btn, triPath, btnSize)
         spark:SetPoint("CENTER", self, "CENTER", x, y)
         spark:Show()
     end)
+end
+
+-- ─── Devinette couleur dominante du sort (via heuristique sur chemin d'icône) ─
+local SCHOOL_COLORS = {
+    fire    = {1.00, 0.55, 0.15},
+    frost   = {0.40, 0.80, 1.00},
+    nature  = {0.30, 1.00, 0.45},
+    holy    = {1.00, 0.92, 0.45},
+    shadow  = {0.55, 0.22, 0.75},
+    arcane  = {0.78, 0.42, 1.00},
+    blood   = {0.85, 0.10, 0.15},
+    earth   = {0.55, 0.45, 0.20},
+    physical= {0.75, 0.68, 0.40},
+}
+local function _guessSpellColor(iconPath)
+    if not iconPath then return SCHOOL_COLORS.physical end
+    local p = tostring(iconPath):lower()
+    if p:find("fire") or p:find("flame") or p:find("burn") or p:find("inferno") then return SCHOOL_COLORS.fire end
+    if p:find("frost") or p:find("ice") or p:find("freeze") or p:find("blizzard") then return SCHOOL_COLORS.frost end
+    if p:find("nature") or p:find("heal") or p:find("druid") or p:find("nourish") or p:find("rejuv") then return SCHOOL_COLORS.nature end
+    if p:find("holy") or p:find("light") or p:find("paladin") or p:find("renew") then return SCHOOL_COLORS.holy end
+    if p:find("shadow") or p:find("warlock") or p:find("priest") or p:find("death") then return SCHOOL_COLORS.shadow end
+    if p:find("arcane") or p:find("mage") or p:find("polymorph") then return SCHOOL_COLORS.arcane end
+    if p:find("blood") or p:find("dk_") then return SCHOOL_COLORS.blood end
+    if p:find("earth") or p:find("rock") or p:find("stone") then return SCHOOL_COLORS.earth end
+    return SCHOOL_COLORS.physical
 end
 
 -- Décalage du centroïde du triangle par rapport au centre de la boîte.
@@ -441,6 +471,53 @@ end
 
 function ActionBars:Prewarm()
     if not self._leftWing then self:Init() end
+    self:HideBlizzardUI()
+end
+
+-- ─── Masquer l'UI Blizzard remplacée par SUF ─────────────────────────────────
+function ActionBars:HideBlizzardUI()
+    local cfg = SUF.db
+    if not cfg then return end
+    local hide = SUF._blizzHidden
+    if not hide then
+        hide = CreateFrame("Frame", nil, UIParent)
+        hide:Hide()
+        SUF._blizzHidden = hide
+    end
+    local function kill(name)
+        local f = _G[name]
+        if not f then return end
+        pcall(function()
+            f:UnregisterAllEvents()
+            f:Hide()
+            f:SetParent(hide)
+            if f.HookScript then
+                f:HookScript("OnShow", function(self) self:Hide() end)
+            end
+        end)
+    end
+    if cfg.hide_blizzard_action_bars then
+        for _, n in ipairs({
+            "MainMenuBar","MainMenuBarArtFrame","OverrideActionBar",
+            "MultiBarBottomLeft","MultiBarBottomRight",
+            "MultiBarLeft","MultiBarRight",
+            "MultiBar5","MultiBar6","MultiBar7",
+            "StanceBarFrame","PossessBarFrame","PetActionBarFrame",
+        }) do kill(n) end
+    end
+    if cfg.hide_blizzard_xp_bar then
+        for _, n in ipairs({
+            "StatusTrackingBarManager",
+            "MainStatusTrackingBarContainer",
+            "SecondaryStatusTrackingBarContainer",
+            "ExpBar",
+        }) do kill(n) end
+    end
+    if cfg.hide_blizzard_micromenu then
+        for _, n in ipairs({
+            "MicroButtonAndBagsBar","MicroMenuContainer","BagsBar",
+        }) do kill(n) end
+    end
 end
 
 -- ─── Pilotage icône / cooldown / état ─────────────────────────────────────────
@@ -463,11 +540,18 @@ local function _updateButton(btn)
             iconTex:SetSize((btn._btnSize or 40) * 0.72, (btn._btnSize or 40) * 0.72)
             iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             if btn._triMask then pcall(iconTex.AddMaskTexture, iconTex, btn._triMask) end
-            if btn._fillTex then btn._fillTex:SetAlpha(0.55) end
+            -- Fade intérieur couleur dominante : camoufle les coins du triangle
+            -- (en l'absence de cast en cours).
+            if btn._fillTex and not btn._castTint then
+                local r, g, b = unpack(_guessSpellColor(tex))
+                btn._fillTex:SetVertexColor(r * 0.50, g * 0.50, b * 0.50, 0.62)
+            end
         else
             iconTex:SetTexture(nil)
             iconTex:SetAlpha(0)
-            if btn._fillTex then btn._fillTex:SetAlpha(0.85) end
+            if btn._fillTex and not btn._castTint then
+                btn._fillTex:SetVertexColor(0.03, 0.03, 0.05, 0.55)
+            end
         end
     end
     -- Count (charges / consommables)
