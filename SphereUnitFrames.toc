@@ -24,6 +24,8 @@ Modules/MinimapIntegration.lua
 Modules/ActionBars.lua
 Modules/Interaction.lua
 Modules/Clock.lua
+Modules/XPBar.lua
+Modules/MicroMenu.lua
 Modules/ProfileManager.lua
 Core.lua
 Modules/PSUI.lua

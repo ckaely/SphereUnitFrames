@@ -240,7 +240,7 @@ SUF.defaults = {
         actionbar_tri_spacing    = 0.96,        -- facteur d'espacement (overlap)
         actionbar_gap            = 6,           -- marge entre orbe et 1re colonne
         actionbar_show_frames    = true,        -- dessiner les cadres (bordures)
-        actionbar_frame_alpha    = 0.95,
+        actionbar_frame_alpha    = 0.55,        -- subtil par défaut (sombre transparent)
         actionbar_glow_procs     = true,
         actionbar_range_check    = true,
         -- Cooldown triangulaire premium (edge runner)
@@ -263,6 +263,23 @@ SUF.defaults = {
         modules_auras_enabled    = true,
         modules_hplerp_enabled   = true,
         modules_power_enabled    = true,
+
+        -- Barre d'XP circulaire (10 segments violets autour de la sphère)
+        xpbar_enabled       = true,
+        xpbar_radius_ratio  = 0.62,
+        xpbar_seg_width     = 36,
+        xpbar_seg_height    = 7,
+        xpbar_lit_r         = 0.65,
+        xpbar_lit_g         = 0.25,
+        xpbar_lit_b         = 1.00,
+        xpbar_shadow_alpha  = 0.55,
+        xpbar_outline_alpha = 0.85,
+
+        -- Micro menu (Personnage / Sorts / Talents / Hauts faits / ...)
+        micromenu_enabled  = true,
+        micromenu_position = "bottom",   -- "top"|"bottom" (par rapport à l'orbe)
+        micromenu_btn_size = 26,
+        micromenu_btn_space= 2,
 
         -- Horloge intégrée
         clock_enabled      = true,

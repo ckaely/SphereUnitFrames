@@ -660,14 +660,38 @@ function PSUI:_BuildModulesPage()
     _check(p, "Activer le profiler", "perf_enabled", 8, -344)
     _slider(p, "Seuil d'alerte (ms)", "perf_seuil_ms", 1.0, 30.0, 0.5, 8, -368)
 
-    _divider(p, -406)
-    _label(p, "|cFFAACCFFProfils|r", 8, -412, 11)
+    _divider(p, -396)
+    _label(p, "|cFFCCAAFFBarre d'XP|r", 8, -402, 11)
+    _check(p, "Activée", "xpbar_enabled", 8, -416, function()
+        if SUF.XPBar then pcall(SUF.XPBar.Refresh, SUF.XPBar) end
+    end)
+    _slider(p, "Rayon",    "xpbar_radius_ratio", 0.4, 1.0, 0.02, 8, -440, function()
+        if SUF.XPBar then pcall(SUF.XPBar.Refresh, SUF.XPBar) end
+    end)
+    _slider(p, "Hauteur segments", "xpbar_seg_height", 3, 16, 1, 8, -482, function()
+        if SUF.XPBar then pcall(SUF.XPBar.Refresh, SUF.XPBar) end
+    end)
+
+    _divider(p, -520)
+    _label(p, "|cFFFFCC99Micro menu|r", 8, -526, 11)
+    _check(p, "Activé", "micromenu_enabled", 8, -540, function()
+        if SUF.MicroMenu then pcall(SUF.MicroMenu.Refresh, SUF.MicroMenu) end
+    end)
+    _dropdown(p, "Position", {
+        {label="Sous l'orbe",       value="bottom"},
+        {label="Au-dessus de l'orbe", value="top"},
+    }, "micromenu_position", 8, -560, function()
+        if SUF.MicroMenu then pcall(SUF.MicroMenu.Refresh, SUF.MicroMenu) end
+    end)
+
+    _divider(p, -610)
+    _label(p, "|cFFAACCFFProfils|r", 8, -616, 11)
     local list = (SUF.Profiles and SUF.Profiles:List()) or {}
     local cur  = (SUF.Profiles and SUF.Profiles:Current()) or "Default"
     local opts = {}
     for _, n in ipairs(list) do opts[#opts+1] = {label=n, value=n} end
     if #opts == 0 then opts[1] = {label=cur, value=cur} end
-    _dropdown(p, "Profil actuel", opts, "_dummy_profile", 8, -428, function(v)
+    _dropdown(p, "Profil actuel", opts, "_dummy_profile", 8, -632, function(v)
         if SUF.Profiles then pcall(SUF.Profiles.SwitchTo, SUF.Profiles, v) end
     end)
     -- Boutons profil
@@ -686,8 +710,8 @@ function PSUI:_BuildModulesPage()
         b:SetScript("OnClick", action)
         return b
     end
-    _profBtn("Reset",     8,   -470, function() if SUF.Profiles then pcall(SUF.Profiles.Reset, SUF.Profiles) end end)
-    _profBtn("Dupliquer", 84,  -470, function() if SUF.Profiles and SUF.Profiles:Current() then pcall(SUF.Profiles.Duplicate, SUF.Profiles, SUF.Profiles:Current()) end end)
+    _profBtn("Reset",     8,   -674, function() if SUF.Profiles then pcall(SUF.Profiles.Reset, SUF.Profiles) end end)
+    _profBtn("Dupliquer", 84,  -674, function() if SUF.Profiles and SUF.Profiles:Current() then pcall(SUF.Profiles.Duplicate, SUF.Profiles, SUF.Profiles:Current()) end end)
 end
 
 -- ─── API publique ─────────────────────────────────────────────────────────────

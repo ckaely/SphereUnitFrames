@@ -170,50 +170,49 @@ local function _createButton(parent, actionSlot, triPath, btnSize, name)
     end)
     btn._triMask = mask
 
-    -- Cadre (bordure) : triangle plein teinté, légèrement plus grand, derrière.
+    -- Cadre triangulaire : SOMBRE TRANSPARENT par défaut (subtil), pas jaune.
+    -- Le jaune est réservé au flash de cast (quand on lance le sort).
     if cfg and cfg.actionbar_show_frames ~= false then
         local frame = btn:CreateTexture(nil, "BACKGROUND")
         frame:SetTexture(triPath)
         frame:SetPoint("CENTER", btn, "CENTER", 0, 0)
         frame:SetSize(btnSize, btnSize)
-        frame:SetVertexColor(0.85, 0.68, 0.20, cfg.actionbar_frame_alpha or 0.95)
+        frame:SetVertexColor(0.18, 0.18, 0.22, (cfg.actionbar_frame_alpha or 0.55))
         btn._frameTex = frame
 
-        -- Fond sombre interne (laisse apparaître le cadre or sur les bords)
+        -- Fond sombre transparent interne
         local fill = btn:CreateTexture(nil, "BORDER")
         fill:SetTexture(triPath)
         fill:SetPoint("CENTER", btn, "CENTER", 0, 0)
-        fill:SetSize(btnSize * 0.88, btnSize * 0.88)
-        fill:SetVertexColor(0.05, 0.05, 0.07, 0.92)
+        fill:SetSize(btnSize * 0.92, btnSize * 0.92)
+        fill:SetVertexColor(0.03, 0.03, 0.05, 0.55)
         btn._fillTex = fill
     end
 
-    -- Icône d'action : centrée sur le CENTROÏDE du triangle (pas la boîte)
+    -- Icône d'action : on UTILISE celle du template (qui pilote l'affichage
+    -- automatiquement). On la centre au CENTROÏDE et on la masque triangle.
     local cx, cy = _centroidOffset(triPath, btnSize)
     btn._centroidX = cx
     btn._centroidY = cy
     btn._btnSize   = btnSize
-
-    -- ── IMPORTANT : on neutralise l'icône native du template (qui réécrit
-    -- ses propres anchors/size à chaque update) et on dessine LA NÔTRE par-dessus.
-    local nativeIcon = btn.icon or btn.Icon
-    if nativeIcon then
-        pcall(function() nativeIcon:SetAlpha(0); nativeIcon:Hide() end)
+    local iconTex = btn.icon or btn.Icon
+    if iconTex then
+        iconTex:ClearAllPoints()
+        iconTex:SetPoint("CENTER", btn, "CENTER", cx, cy)
+        iconTex:SetSize(btnSize * 0.72, btnSize * 0.72)
+        iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        iconTex:SetDrawLayer("ARTWORK", 3)
+        pcall(iconTex.AddMaskTexture, iconTex, mask)
+        iconTex:SetAlpha(1)
+        iconTex:Show()
     end
 
-    local myIcon = btn:CreateTexture(nil, "ARTWORK", nil, 4)
-    myIcon:SetPoint("CENTER", btn, "CENTER", cx, cy)
-    myIcon:SetSize(btnSize * 0.66, btnSize * 0.66)
-    myIcon:SetTexCoord(0.10, 0.90, 0.10, 0.90)
-    pcall(myIcon.AddMaskTexture, myIcon, mask)
-    btn._myIcon = myIcon
-
-    -- ── Flash de cast triangulaire (custom, REMPLACE l'animation Blizzard) ───
+    -- ── Flash de cast triangulaire (jaune au moment du cast) ──────────────
     local castFlash = btn:CreateTexture(nil, "OVERLAY", nil, 6)
     castFlash:SetTexture(triPath)
     castFlash:SetAllPoints(btn)
     castFlash:SetBlendMode("ADD")
-    castFlash:SetVertexColor(1, 0.95, 0.6, 1)
+    castFlash:SetVertexColor(1.0, 0.85, 0.15, 1)
     castFlash:SetAlpha(0)
     btn._castFlash = castFlash
 
@@ -405,27 +404,25 @@ end
 local function _updateButton(btn)
     if not btn or not btn._actionSlot then return end
     local slot    = btn._actionSlot
-    -- L'icône native du template est neutralisée → on garde la nôtre.
-    if btn.icon and btn.icon.SetAlpha then pcall(btn.icon.SetAlpha, btn.icon, 0) end
-    if btn.Icon and btn.Icon.SetAlpha then pcall(btn.Icon.SetAlpha, btn.Icon, 0) end
-    local iconTex = btn._myIcon
+    local iconTex = btn.icon or btn.Icon
     local tex
     local ok = pcall(function() tex = GetActionTexture(slot) end)
     if iconTex then
         if ok and tex then
             iconTex:SetTexture(tex)
             iconTex:SetAlpha(1)
-            -- Force le ré-anchorage triangulaire (au cas où qqch ait changé)
+            iconTex:Show()
+            -- Force le ré-anchorage triangulaire (le template tente de le réécrire)
             iconTex:ClearAllPoints()
             iconTex:SetPoint("CENTER", btn, "CENTER", btn._centroidX or 0, btn._centroidY or 0)
-            iconTex:SetSize((btn._btnSize or 40) * 0.66, (btn._btnSize or 40) * 0.66)
-            iconTex:SetTexCoord(0.10, 0.90, 0.10, 0.90)
+            iconTex:SetSize((btn._btnSize or 40) * 0.72, (btn._btnSize or 40) * 0.72)
+            iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             if btn._triMask then pcall(iconTex.AddMaskTexture, iconTex, btn._triMask) end
-            if btn._fillTex then btn._fillTex:SetAlpha(0.35) end
+            if btn._fillTex then btn._fillTex:SetAlpha(0.55) end
         else
             iconTex:SetTexture(nil)
             iconTex:SetAlpha(0)
-            if btn._fillTex then btn._fillTex:SetAlpha(1) end
+            if btn._fillTex then btn._fillTex:SetAlpha(0.85) end
         end
     end
     -- Count (charges / consommables)
