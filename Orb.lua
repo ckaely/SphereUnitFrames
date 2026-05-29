@@ -38,14 +38,12 @@ local WHITE8x8     = SUF.WHITE8x8     or "Interface\\Buttons\\WHITE8X8"
 -- NE PAS utiliser ping4 (radial glow = gradient, produit un carré visible).
 local CIRCLE_MASK  = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
 
--- ─── Assets SNP ──────────────────────────────────────────────────────────────
--- Textures sphère depuis SphereNameplates/media/ (si SNP installé).
--- SUF.SNP_MEDIA est défini dans Config.lua comme chemin absolu.
--- Si SNP absent : la texture est nil → WoW ignore silencieusement → fond transparent.
+-- ─── Assets locaux ───────────────────────────────────────────────────────────
+-- Textures sphère copiées dans SphereUnitFrames/media/ — indépendant de SNP.
 -- NE PAS utiliser NATIVE_RING (UI-AutoCastableOverlay) ni RADIAL_GLOW (ping4)
 -- pour des effets visuels : ce sont des textures WoW génériques non sphériques.
 local function SNPM(n)
-    return (SUF.SNP_MEDIA or "Interface\\AddOns\\SphereNameplates\\media\\") .. n
+    return (SUF.MEDIA or "Interface\\AddOns\\SphereUnitFrames\\media\\") .. n
 end
 local pi, cos, sin, abs = math.pi, math.cos, math.sin, math.abs
 
@@ -215,12 +213,7 @@ function Orb:CreatePlayer()
     -- Light Star
     local lightStar = hpFxClipFrame:CreateTexture(nil, "ARTWORK")
     lightStar:SetAllPoints(orb)
-    local snpStarPath = SUF.SNP_MEDIA and (SUF.SNP_MEDIA .. "light_star.png")
-    if snpStarPath and GetFileDataID and GetFileDataID(snpStarPath) ~= 0 then
-        lightStar:SetTexture(snpStarPath)
-    else
-        lightStar:SetTexture(NATIVE_RING)
-    end
+    lightStar:SetTexture(SNPM("light_star.png"))
     lightStar:SetBlendMode("ADD")
     lightStar:SetVertexColor(1.0, 1.0, 1.0, cfg.orb_midnight_star_alpha or 0.60)
     lightStar:AddMaskTexture(hpEffectMask)
