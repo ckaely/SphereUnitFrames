@@ -272,16 +272,12 @@ SUF.defaults = {
         modules_hplerp_enabled   = true,
         modules_power_enabled    = true,
 
-        -- Barre d'XP circulaire (10 segments violets autour de la sphère)
+        -- Barre d'XP circulaire (CooldownFrame en mode "fill statique")
         xpbar_enabled       = true,
-        xpbar_radius_ratio  = 0.62,
-        xpbar_seg_width     = 36,
-        xpbar_seg_height    = 7,
+        xpbar_radius_ratio  = 1.32,
         xpbar_lit_r         = 0.65,
         xpbar_lit_g         = 0.25,
         xpbar_lit_b         = 1.00,
-        xpbar_shadow_alpha  = 0.55,
-        xpbar_outline_alpha = 0.85,
 
         -- Micro menu (Personnage / Sorts / Talents / Hauts faits / ...)
         -- Style fantasy fade-in (bas écran), zoom dock macOS au survol,

@@ -759,18 +759,11 @@ function PSUI:_BuildXPPage()
     _check(p, "Activer la barre d'XP", "xpbar_enabled", 8, -10, refresh)
 
     _divider(p, -42)
-    _label(p, "Géométrie", 8, -48, 11)
-    _slider(p, "Rayon (× orbSize)", "xpbar_radius_ratio", 0.40, 1.20, 0.02, 8, -64, refresh)
-    _slider(p, "Largeur segments",  "xpbar_seg_width",    10,   80,   1,   8, -106, refresh)
-    _slider(p, "Hauteur segments",  "xpbar_seg_height",   3,    16,   1,   8, -148, refresh)
+    _slider(p, "Rayon (× orbSize)", "xpbar_radius_ratio", 1.10, 1.80, 0.02, 8, -54, refresh)
 
-    _divider(p, -186)
-    _label(p, "Couleur de la barre", 8, -192, 11)
-    _colorButton(p, "Couleur",       "xpbar_lit_r", "xpbar_lit_g", "xpbar_lit_b", 8, -210, refresh)
-
-    _divider(p, -246)
-    _slider(p, "Opacité ombre",   "xpbar_shadow_alpha",  0.0, 1.0, 0.05, 8, -256, refresh)
-    _slider(p, "Opacité contour", "xpbar_outline_alpha", 0.0, 1.0, 0.05, 8, -298, refresh)
+    _divider(p, -96)
+    _label(p, "Couleur de la barre", 8, -102, 11)
+    _colorButton(p, "Couleur", "xpbar_lit_r", "xpbar_lit_g", "xpbar_lit_b", 8, -120, refresh)
 end
 
 -- ─── Page Modules ─────────────────────────────────────────────────────────────
